@@ -1,0 +1,47 @@
+import type { Card } from '../core/types';
+import { scoreOf } from '../core/score';
+
+export function cardLabel(card: Card): string {
+  if (card.rank === 'JOKER_BIG') return '大王';
+  if (card.rank === 'JOKER_SMALL') return '小王';
+  const suitMap: Record<string, string> = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
+  return `${suitMap[card.suit as string]}${card.rank}`;
+}
+
+export function isRed(card: Card): boolean {
+  return card.suit === 'hearts' || card.suit === 'diamonds' || card.rank === 'JOKER_BIG';
+}
+
+interface Props {
+  card: Card | null;
+  known: boolean;
+  faceUp?: boolean; // 强制正面（发牌确认阶段）
+  onClick?: () => void;
+  selectable?: boolean;
+  highlight?: boolean;
+}
+
+export default function CardView({ card, known, faceUp, onClick, selectable, highlight }: Props) {
+  if (!card) {
+    return <div className="card card-empty" />;
+  }
+
+  const show = known || faceUp;
+  const classes = ['card'];
+  if (!show) classes.push('card-back');
+  if (selectable) classes.push('card-selectable');
+  if (highlight) classes.push('card-highlight');
+  if (show && isRed(card)) classes.push('card-red');
+
+  if (!show) {
+    return <div className={classes.join(' ')} onClick={onClick}>?</div>;
+  }
+
+  const score = scoreOf(card);
+  return (
+    <div className={classes.join(' ')} onClick={onClick}>
+      <div className="card-corner">{cardLabel(card)}</div>
+      <div className="card-score">{score > 0 ? `+${score}` : score}</div>
+    </div>
+  );
+}

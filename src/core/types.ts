@@ -60,7 +60,7 @@ export interface FollowState {
 export type PendingAction =
   | { kind: 'drawn'; card: Card } // 刚摸到的牌，等待处理
   | { kind: 'chooseSelfSlot'; purpose: 'view' | 'swap'; ability: Ability } // 选自己一张槽位
-  | { kind: 'chooseOtherSlot'; purpose: 'view' | 'swap'; ability: Ability; selfSlot: number } // 选其他玩家+槽位
+  | { kind: 'chooseOtherSlot'; purpose: 'view' | 'swap'; ability: Ability; selfSlot?: number } // 选其他玩家+槽位
   | {
       kind: 'confirmReveal';
       selfSlot: number;

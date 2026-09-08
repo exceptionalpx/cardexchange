@@ -1,8 +1,7 @@
 // 规则引擎测试：发牌/定牌/摸牌/弃牌/替换/功能牌/跟弃/结算/非法操作
 import { describe, expect, it } from 'vitest';
 import { applyAction, canApply, createGame, settle } from '../src/core/engine';
-import { handScore } from '../src/core/score';
-import type { Action, Card, GameState } from '../src/core/types';
+import type { Card, GameState } from '../src/core/types';
 
 function card(rank: Card['rank'], suit: Card['suit'] = 'spades'): Card {
   const prefix: Record<string, string> = {

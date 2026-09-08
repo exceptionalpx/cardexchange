@@ -25,7 +25,7 @@ function nextPlayer(state: GameState, from: number): number {
   return (from + 1) % state.players.length;
 }
 
-function log(state: GameState, playerId: number, text: string): LogEntry {
+function log(_state: GameState, playerId: number, text: string): LogEntry {
   return { playerId, text };
 }
 
@@ -384,6 +384,7 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
 
   // 交换类
   const selfSlot = pend.selfSlot;
+  if (selfSlot === undefined) return state;
   const selfCard = me.handSlots[selfSlot];
   if (!selfCard) return state;
 
@@ -512,7 +513,7 @@ function followDiscard(state: GameState, playerId: number): GameState {
   const me = state.players[playerId];
   const first = follow.submitted.length === 0;
 
-  const decisions = { ...follow.decisions, [playerId]: 'follow' };
+  const decisions: Record<number, FollowDecision> = { ...follow.decisions, [playerId]: 'follow' };
   const submitted = [...follow.submitted, playerId];
 
   let players = state.players;
@@ -521,10 +522,10 @@ function followDiscard(state: GameState, playerId: number): GameState {
   let extraLog: string;
 
   if (first) {
-    // 成功：弃掉一张同分牌
+    // 成功：弃掉一张同分牌（canApply 已保证存在）
     const idx = me.handSlots.findIndex((c) => c !== null && scoreOf(c) === follow.targetScore);
+    const discarded = me.handSlots[idx]!;
     const slots = [...me.handSlots];
-    const discarded = slots[idx];
     slots[idx] = null;
     players = players.map((p) => (p.id === playerId ? { ...p, handSlots: slots } : p));
     discardPile = [...discardPile, discarded];
@@ -569,7 +570,7 @@ function isFollowClosed(state: GameState): boolean {
 function passFollow(state: GameState, playerId: number): GameState {
   const follow = state.follow;
   if (!follow) return state;
-  const decisions = { ...follow.decisions, [playerId]: 'pass' as const };
+  const decisions: Record<number, FollowDecision> = { ...follow.decisions, [playerId]: 'pass' };
   let nextState: GameState = {
     ...state,
     follow: { ...follow, decisions },
