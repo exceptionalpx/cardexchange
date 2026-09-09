@@ -356,14 +356,14 @@ function pickSelfSlot(state: GameState, slot: number): GameState {
 
   if (pend.purpose === 'view') {
     // 查看自己一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
+    // 日志不写具体牌面（记忆考验：翻看后不标记，联机日志对所有玩家安全）
     const updated = addKnowledge(me, card);
     const players = state.players.map((p) => (p.id === me.id ? updated : p));
-    const desc = me.isBot ? '自己的一张牌' : `自己的 ${cardLabel(card)}`;
     return {
       ...state,
       players,
       pending: { kind: 'revealDone', card, viewer: me.id },
-      log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了${desc}`)],
+      log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的一张牌`)],
     };
   }
 
@@ -386,16 +386,17 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
 
   if (pend.purpose === 'view') {
     // 查看其他玩家一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
+    // 日志不写牌面（联机日志对所有玩家安全，不透露被看牌的具体点数）
     const updated = addKnowledge(me, card);
     const players = state.players.map((p) => (p.id === me.id ? updated : p));
-    const desc = me.isBot
-      ? `${playerName(state, playerId)} 的一张牌`
-      : `${playerName(state, playerId)} 的 ${cardLabel(card)}`;
     return {
       ...state,
       players,
       pending: { kind: 'revealDone', card, viewer: me.id },
-      log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了 ${desc}`)],
+      log: [
+        ...state.log,
+        log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的一张牌`),
+      ],
     };
   }
 
@@ -409,10 +410,7 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
     // 明换：先展示双方牌
     const updated = addKnowledge(addKnowledge(me, selfCard), card);
     const players = state.players.map((p) => (p.id === me.id ? updated : p));
-    // 信息隐藏：机器人明换时日志不透露对方牌面
-    const kDesc = me.isBot
-      ? `${playerName(state, me.id)} 使用 K 明换，查看了 ${playerName(state, playerId)} 的一张牌`
-      : `${playerName(state, me.id)} 使用 K 明换，看到了 ${playerName(state, playerId)} 的 ${cardLabel(card)}`;
+    // 信息隐藏：日志统一不写牌面（联机时对所有玩家安全）
     return {
       ...state,
       players,
@@ -424,7 +422,14 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
         otherSlot: slot,
         otherCard: card,
       },
-      log: [...state.log, log(state, me.id, kDesc)],
+      log: [
+        ...state.log,
+        log(
+          state,
+          me.id,
+          `${playerName(state, me.id)} 使用 K 明换，查看了 ${playerName(state, playerId)} 的一张牌`,
+        ),
+      ],
     };
   }
 

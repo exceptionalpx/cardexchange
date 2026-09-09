@@ -17,9 +17,10 @@ function loadSaved(): GameConfigUI | null {
 
 interface Props {
   onStart: (config: GameConfigUI) => void;
+  onOnline: () => void;
 }
 
-export default function MenuScreen({ onStart }: Props) {
+export default function MenuScreen({ onStart, onOnline }: Props) {
   const saved = loadSaved();
   const [playerCount, setPlayerCount] = useState(saved?.playerCount ?? 2);
   const [botCount, setBotCount] = useState(saved?.botCount ?? 1);
@@ -82,6 +83,9 @@ export default function MenuScreen({ onStart }: Props) {
       <div className="menu-actions">
         <button className="btn btn-big btn-primary" onClick={start}>
           开始游戏
+        </button>
+        <button className="btn btn-big" onClick={onOnline}>
+          联机对战
         </button>
         <button className="btn btn-big" onClick={() => setShowRules(true)}>
           规则说明

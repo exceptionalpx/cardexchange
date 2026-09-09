@@ -274,7 +274,7 @@ describe('功能牌', () => {
     expect(g3.log.at(-1)?.text).toBe('P0 使用 K 明换，查看了 P1 的一张牌');
     expect(g3.log.at(-1)?.text).not.toContain('♠5');
 
-    // 真人查看自己（7/8）：日志保留牌面（真人需要记忆）
+    // 真人查看自己（7/8）：日志不写牌面（记忆考验"翻看后不标记"，联机日志对所有玩家安全）
     const s4 = makeGame([[card('A'), card('K'), card('2'), card('3')]], {
       deck: [card('7')],
     });
@@ -282,7 +282,8 @@ describe('功能牌', () => {
     let g4 = applyAction(s4, { type: 'DRAW' });
     g4 = applyAction(g4, { type: 'USE_ABILITY' });
     g4 = applyAction(g4, { type: 'PICK_SELF_SLOT', slot: 1 });
-    expect(g4.log.at(-1)?.text).toBe('P0 查看了自己的 ♠K');
+    expect(g4.log.at(-1)?.text).toBe('P0 查看了自己的一张牌');
+    expect(g4.log.at(-1)?.text).not.toContain('♠K');
   });
 
   it('J 暗换：交换双方槽位，双方均不知道新牌', () => {

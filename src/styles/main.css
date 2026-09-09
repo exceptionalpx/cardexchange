@@ -149,6 +149,105 @@ body {
   margin-top: 8px;
 }
 
+/* ---------- 联机大厅 ---------- */
+.lobby {
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 40px 20px;
+}
+
+.text-input {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-light);
+  font-size: 15px;
+  width: 240px;
+  text-align: center;
+  outline: none;
+}
+
+.text-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.text-input:focus {
+  border-color: #f5c542;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hint-error {
+  color: #ff9d9d;
+}
+
+.lobby-cols {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.lobby-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.room-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 340px;
+  max-width: 92vw;
+}
+
+.room-seat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.room-seat-me {
+  border-color: #f5c542;
+  background: rgba(245, 197, 66, 0.14);
+}
+
+.room-seat-name {
+  flex: 1;
+  font-size: 15px;
+}
+
+.badge-wait {
+  background: #8a8f98;
+  color: #fff;
+  animation: wait-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes wait-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* ---------- 模态 ---------- */
 .modal {
   position: fixed;

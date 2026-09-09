@@ -4,14 +4,26 @@ import type { Action, GameState } from '../core/types';
 import { applyAction, createGame } from '../core/engine';
 import { aiDecide } from '../core/ai';
 import { buildView, type ViewPlayer } from '../core/view';
+import type { ClientGameView } from '../../server/protocol';
 import PlayerSeat from './PlayerSeat';
 import ActionPanel from './ActionPanel';
 import LogPanel from './LogPanel';
 import DiscardPile from './DiscardPile';
 import ResultScreen from './ResultScreen';
 
+/** 联机模式属性：服务器权威视图 + 动作发送 */
+export interface OnlineGameProps {
+  view: ClientGameView;
+  myId: number;
+  send: (a: Action) => void;
+  onRestart: () => void;
+  canRestart: boolean;
+  onExit: () => void;
+}
+
 interface Props {
-  config: GameConfigUI;
+  config?: GameConfigUI;
+  online?: OnlineGameProps;
   onExit: () => void;
 }
 
@@ -30,6 +42,7 @@ const FOLLOW_WINDOW_MS = 4000; // 跟弃窗口固定时长
  * 计算翻看/明换展示中需要强制正面的牌。
  * 信息隐藏：只有"真人"发动者（revealDone.viewer / confirmReveal 时 currentPlayer）能看到牌面；
  * 机器人发动的翻看/明换不向玩家亮牌，玩家只能通过行为推理。
+ * 联机脱敏后牌面字段可能为 undefined（非查看者客户端），需守卫。
  */
 export function computeFaceUpIds(
   pending: GameState['pending'],
@@ -38,37 +51,51 @@ export function computeFaceUpIds(
 ): Set<string> {
   const set = new Set<string>();
   const viewerIsBot =
-    (pending?.kind === 'revealDone' && players[pending.viewer].isBot) ||
-    (pending?.kind === 'confirmReveal' && players[currentPlayer].isBot);
-  if (pending?.kind === 'revealDone' && !viewerIsBot) {
+    (pending?.kind === 'revealDone' && players[pending.viewer]?.isBot) ||
+    (pending?.kind === 'confirmReveal' && players[currentPlayer]?.isBot);
+  if (pending?.kind === 'revealDone' && !viewerIsBot && pending.card) {
     set.add(pending.card.id);
   }
-  if (pending?.kind === 'confirmReveal' && !viewerIsBot) {
+  if (pending?.kind === 'confirmReveal' && !viewerIsBot && pending.selfCard && pending.otherCard) {
     set.add(pending.selfCard.id);
     set.add(pending.otherCard.id);
   }
   return set;
 }
 
-export default function GameScreen({ config, onExit }: Props) {
-  const [state, setState] = useState<GameState>(() =>
-    createGame({ playerCount: config.playerCount, botCount: config.botCount }),
+export default function GameScreen({ config, online, onExit }: Props) {
+  const isOnline = !!online;
+  const [localState, setLocalState] = useState<GameState>(() =>
+    config
+      ? createGame({ playerCount: config.playerCount, botCount: config.botCount })
+      : (null as unknown as GameState),
   );
   const [replaceMode, setReplaceMode] = useState(false);
   const [kDeciding, setKDeciding] = useState(false);
   // 最近一次换牌换入的槽位标记（展示 3 秒后清除，不持续）
   const [swapMark, setSwapMark] = useState<{ playerId: number; slot: number }[] | null>(null);
 
-  const dispatch = useCallback((a: Action) => {
-    setState((s) => applyAction(s, a));
-  }, []);
+  // 联机：状态来自服务器视图；本地：内部 reducer
+  const state = isOnline && online ? (online.view as unknown as GameState) : localState;
+
+  const dispatch = useCallback(
+    (a: Action) => {
+      if (online) online.send(a);
+      else setLocalState((s) => applyAction(s, a));
+    },
+    [online],
+  );
 
   const restart = useCallback(() => {
+    if (online) {
+      online.onRestart();
+      return;
+    }
     setReplaceMode(false);
     setKDeciding(false);
     setSwapMark(null);
-    setState(createGame({ playerCount: config.playerCount, botCount: config.botCount }));
-  }, [config]);
+    if (config) setLocalState(createGame({ playerCount: config.playerCount, botCount: config.botCount }));
+  }, [online, config]);
 
   // ---- 换牌标记：监听 lastSwap 变化，高亮双方换入的槽位 3 秒后自动清除 ----
   useEffect(() => {
@@ -82,8 +109,9 @@ export default function GameScreen({ config, onExit }: Props) {
     return () => clearTimeout(t);
   }, [state.lastSwap]);
 
-  // ---- 机器人自动行动调度 ----
+  // ---- 机器人自动行动调度（仅本地模式；联机由服务器调度） ----
   useEffect(() => {
+    if (isOnline) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const current = state.players[state.currentPlayer];
 
@@ -102,11 +130,12 @@ export default function GameScreen({ config, onExit }: Props) {
       }
     }
     return () => timers.forEach(clearTimeout);
-  }, [state, dispatch]);
+  }, [state, dispatch, isOnline]);
 
-  // ---- 跟弃窗口 4 秒超时：未操作的真人均视为放弃 ----
+  // ---- 跟弃窗口 4 秒超时：未操作的真人均视为放弃（仅本地模式） ----
   const followStartRef = useRef<number | null>(null);
   useEffect(() => {
+    if (isOnline) return;
     if (state.phase !== 'follow' || !state.follow) {
       followStartRef.current = null;
       return;
@@ -114,7 +143,7 @@ export default function GameScreen({ config, onExit }: Props) {
     if (followStartRef.current === null) followStartRef.current = Date.now();
     const remaining = Math.max(0, FOLLOW_WINDOW_MS - (Date.now() - followStartRef.current));
     const t = setTimeout(() => {
-      setState((s) => {
+      setLocalState((s) => {
         if (s.phase !== 'follow' || !s.follow) return s;
         let ns = s;
         for (const [idStr, d] of Object.entries(s.follow.decisions)) {
@@ -127,9 +156,9 @@ export default function GameScreen({ config, onExit }: Props) {
       });
     }, remaining);
     return () => clearTimeout(t);
-  }, [state.phase, state.follow]);
+  }, [state.phase, state.follow, isOnline]);
 
-  // ---- 翻看（7/8、9/10）5 秒限时：到点自动收起 ----
+  // ---- 翻看（7/8、9/10）5 秒限时：到点自动收起（联机也由客户端主动提交，服务器兜底） ----
   useEffect(() => {
     if (state.pending?.kind !== 'revealDone') return;
     const t = setTimeout(() => dispatch({ type: 'REVEAL_DONE' }), REVEAL_MS);
@@ -146,8 +175,11 @@ export default function GameScreen({ config, onExit }: Props) {
     return () => clearTimeout(t);
   }, [state.pending]);
 
-  // ---- 视角（始终为当前行动玩家，防止热座泄露） ----
-  const view = useMemo(() => buildView(state, state.currentPlayer), [state]);
+  // ---- 视角：本地为当前行动玩家；联机用服务器按 viewer 生成的视图 ----
+  const view = useMemo(
+    () => (isOnline && online ? online.view.view : buildView(state, state.currentPlayer)),
+    [state, isOnline, online],
+  );
 
   // 翻看/明换展示中的牌（强制正面）
   // 信息隐藏：机器人发动的翻看/明换不向玩家亮牌（只有发动者能看到，玩家只能通过行为推理）
@@ -156,6 +188,7 @@ export default function GameScreen({ config, onExit }: Props) {
     [state.pending, state.currentPlayer, state.players],
   );
 
+  const deckCount = isOnline && online ? online.view.deckCount : state.deck.length;
   const pend = state.pending;
   const selectableSelf =
     pend?.kind === 'chooseSelfSlot' || (pend?.kind === 'drawn' && replaceMode);
@@ -175,7 +208,14 @@ export default function GameScreen({ config, onExit }: Props) {
   }
 
   if (state.phase === 'end') {
-    return <ResultScreen state={state} onRestart={restart} onExit={onExit} />;
+    return (
+      <ResultScreen
+        state={state}
+        onRestart={restart}
+        canRestart={isOnline ? online.canRestart : true}
+        onExit={onExit}
+      />
+    );
   }
 
   // 记忆考验：平时一律背面，只有发牌看牌、翻看限时、K 明换展示中的牌正面
@@ -201,7 +241,7 @@ export default function GameScreen({ config, onExit }: Props) {
           {state.declaredPlayer !== null && (
             <span className="badge badge-declared">{state.players[state.declaredPlayer].name} 已定牌</span>
           )}
-          <span className="badge">牌堆剩余 {state.deck.length} 张</span>
+          <span className="badge">牌堆剩余 {deckCount} 张</span>
         </div>
         <button className="btn btn-small" onClick={onExit}>
           退出
@@ -225,7 +265,7 @@ export default function GameScreen({ config, onExit }: Props) {
           <div className="center-area">
             <div className="deck-stub">
               <div className="pile-label">牌堆</div>
-              <div className="deck-count">{state.deck.length} 张</div>
+              <div className="deck-count">{deckCount} 张</div>
             </div>
             <DiscardPile state={state} />
           </div>
@@ -264,6 +304,7 @@ export default function GameScreen({ config, onExit }: Props) {
           setReplaceMode={setReplaceMode}
           kDeciding={kDeciding}
           setKDeciding={setKDeciding}
+          myId={isOnline && online ? online.myId : undefined}
         />
 
         <LogPanel state={state} />

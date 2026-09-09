@@ -4,10 +4,12 @@ import CardView from './CardView';
 interface Props {
   state: GameState;
   onRestart: () => void;
+  /** 联机模式：只有房主能发起下一局 */
+  canRestart?: boolean;
   onExit: () => void;
 }
 
-export default function ResultScreen({ state, onRestart, onExit }: Props) {
+export default function ResultScreen({ state, onRestart, canRestart = true, onExit }: Props) {
   const winners = state.winner ?? [];
   return (
     <div className="result-screen">
@@ -38,9 +40,13 @@ export default function ResultScreen({ state, onRestart, onExit }: Props) {
           })}
         </div>
         <div className="btn-row">
-          <button className="btn btn-primary btn-big" onClick={onRestart}>
-            再来一局
-          </button>
+          {canRestart ? (
+            <button className="btn btn-primary btn-big" onClick={onRestart}>
+              再来一局
+            </button>
+          ) : (
+            <p className="hint">等待房主开始下一局…</p>
+          )}
           <button className="btn btn-big" onClick={onExit}>
             返回主菜单
           </button>

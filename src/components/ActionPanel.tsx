@@ -10,6 +10,8 @@ interface Props {
   setReplaceMode: (v: boolean) => void;
   kDeciding: boolean;
   setKDeciding: (v: boolean) => void;
+  /** 联机模式：当前客户端玩家的座位号；本地模式不传 */
+  myId?: number;
 }
 
 export default function ActionPanel({
@@ -19,13 +21,33 @@ export default function ActionPanel({
   setReplaceMode,
   kDeciding,
   setKDeciding,
+  myId,
 }: Props) {
   const current = state.players[state.currentPlayer];
   const pend = state.pending;
 
+  // 是否是我在操作：联机看座位号，本地看是否为真人
+  const isMe = myId !== undefined ? myId === state.currentPlayer : !current.isBot;
+
+  // ---- 非自己行动：只显示等待提示，不读取任何牌面字段 ----
+  if (!isMe) {
+    if (state.phase === 'deal') {
+      return <div className="action-panel hint">等待 {current.name} 看牌盖牌…</div>;
+    }
+    if (state.phase === 'follow') {
+      return <div className="action-panel" />; // 跟弃窗口不提示，是否跟弃由玩家自行判断
+    }
+    if (pend?.kind === 'revealDone') {
+      return <div className="action-panel hint">等待 {current.name} 记忆…</div>;
+    }
+    if (pend?.kind === 'confirmReveal') {
+      return <div className="action-panel hint">等待 {current.name} 决定明换…</div>;
+    }
+    return <div className="action-panel hint">等待 {current.name} 操作…</div>;
+  }
+
   // ---- 发牌确认 ----
   if (state.phase === 'deal') {
-    if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在看牌…</div>;
     return (
       <div className="action-panel">
         <p className="hint">轮到 {current.name}：请记住你的 4 张牌，确认后盖牌传给下一位玩家。</p>
@@ -43,56 +65,59 @@ export default function ActionPanel({
 
   // ---- 翻看限时（7/8、9/10） ----
   if (pend?.kind === 'revealDone') {
-    if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在记忆…</div>;
-    return (
-      <div className="action-panel">
-        <p className="hint">
-          记住这张牌：<b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}），5 秒后自动收起
-        </p>
-        <button className="btn btn-primary" onClick={() => dispatch({ type: 'REVEAL_DONE' })}>
-          记住了，收起
-        </button>
-      </div>
-    );
-  }
-
-  // ---- K 明换确认 ----
-  if (pend?.kind === 'confirmReveal') {
-    if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在考虑…</div>;
-    const desc = (
-      <p className="hint">
-        K 明换：你的牌 <b>{cardLabel(pend.selfCard)}</b>（{scoreText(pend.selfCard)}） vs 对方{' '}
-        <b>{cardLabel(pend.otherCard)}</b>（{scoreText(pend.otherCard)}）
-      </p>
-    );
-    if (!kDeciding) {
+    if (pend.card) {
       return (
         <div className="action-panel">
-          {desc}
-          <button className="btn btn-primary" onClick={() => setKDeciding(true)}>
-            进入决定
+          <p className="hint">
+            记住这张牌：<b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}），5 秒后自动收起
+          </p>
+          <button className="btn btn-primary" onClick={() => dispatch({ type: 'REVEAL_DONE' })}>
+            记住了，收起
           </button>
         </div>
       );
     }
-    return (
-      <div className="action-panel">
-        {desc}
-        <div className="btn-row">
-          <button className="btn btn-primary" onClick={() => dispatch({ type: 'SWAP' })}>
-            交换
-          </button>
-          <button className="btn" onClick={() => dispatch({ type: 'KEEP' })}>
-            不换
-          </button>
+    return <div className="action-panel hint">正在记忆…</div>;
+  }
+
+  // ---- K 明换确认 ----
+  if (pend?.kind === 'confirmReveal') {
+    if (pend.selfCard && pend.otherCard) {
+      const desc = (
+        <p className="hint">
+          K 明换：你的牌 <b>{cardLabel(pend.selfCard)}</b>（{scoreText(pend.selfCard)}） vs 对方{' '}
+          <b>{cardLabel(pend.otherCard)}</b>（{scoreText(pend.otherCard)}）
+        </p>
+      );
+      if (!kDeciding) {
+        return (
+          <div className="action-panel">
+            {desc}
+            <button className="btn btn-primary" onClick={() => setKDeciding(true)}>
+              进入决定
+            </button>
+          </div>
+        );
+      }
+      return (
+        <div className="action-panel">
+          {desc}
+          <div className="btn-row">
+            <button className="btn btn-primary" onClick={() => dispatch({ type: 'SWAP' })}>
+              交换
+            </button>
+            <button className="btn" onClick={() => dispatch({ type: 'KEEP' })}>
+              不换
+            </button>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    return <div className="action-panel hint">正在决定明换…</div>;
   }
 
   // ---- 槽位选择 ----
   if (pend?.kind === 'chooseSelfSlot' || pend?.kind === 'chooseOtherSlot') {
-    if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在选择…</div>;
     const targetName = pend.kind === 'chooseOtherSlot' ? '其他玩家的' : '自己的';
     const abilityName: Record<string, string> = {
       '7': '查看自己一张牌',
@@ -114,37 +139,38 @@ export default function ActionPanel({
 
   // ---- 摸到的牌待处理 ----
   if (pend?.kind === 'drawn') {
-    if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在考虑…</div>;
-    const canAbility = canApply(state, { type: 'USE_ABILITY' });
-    return (
-      <div className="action-panel">
-        <p className="hint">
-          {current.name} 摸到了 <b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}），请选择处理方式：
-        </p>
-        <div className="btn-row">
-          {canAbility && (
-            <button className="btn btn-primary" onClick={() => dispatch({ type: 'USE_ABILITY' })}>
-              发动功能
+    if (pend.card) {
+      const canAbility = canApply(state, { type: 'USE_ABILITY' });
+      return (
+        <div className="action-panel">
+          <p className="hint">
+            {current.name} 摸到了 <b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}），请选择处理方式：
+          </p>
+          <div className="btn-row">
+            {canAbility && (
+              <button className="btn btn-primary" onClick={() => dispatch({ type: 'USE_ABILITY' })}>
+                发动功能
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={() => dispatch({ type: 'DISCARD_DRAWN' })}>
+              直接弃牌
             </button>
-          )}
-          <button className="btn btn-primary" onClick={() => dispatch({ type: 'DISCARD_DRAWN' })}>
-            直接弃牌
-          </button>
-          <button
-            className={replaceMode ? 'btn btn-active' : 'btn'}
-            onClick={() => setReplaceMode(!replaceMode)}
-          >
-            替换手牌
-          </button>
+            <button
+              className={replaceMode ? 'btn btn-active' : 'btn'}
+              onClick={() => setReplaceMode(!replaceMode)}
+            >
+              替换手牌
+            </button>
+          </div>
+          {replaceMode && <p className="hint">请点击你手牌中要替换的牌</p>}
         </div>
-        {replaceMode && <p className="hint">请点击你手牌中要替换的牌</p>}
-      </div>
-    );
+      );
+    }
+    return <div className="action-panel hint">正在考虑…</div>;
   }
 
   // ---- 回合开始 ----
   if (state.phase === 'playing' || state.phase === 'final') {
-    if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在思考…</div>;
     return (
       <div className="action-panel">
         <p className="hint">轮到 {current.name}</p>

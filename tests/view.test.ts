@@ -37,6 +37,7 @@ function makeState(hands: Card[][], viewerKnowledge: Card[], otherKnowledge: Car
     lastDiscard: null,
     follow: null,
     pending: null,
+    lastSwap: null,
     finalRemaining: 0,
     winner: null,
     log: [],
