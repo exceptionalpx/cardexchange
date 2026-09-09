@@ -156,12 +156,15 @@ export default function GameScreen({ config, onExit }: Props) {
   }
 
   // 记忆考验：平时一律背面，只有发牌看牌、翻看限时、K 明换展示中的牌正面
+  // 信息隐藏：发牌亮牌仅限"真人"当前玩家（机器人看牌时自动确认，绝不亮牌）
   const dealReveal = state.phase === 'deal';
   const viewPlayers: ViewPlayer[] = view.players.map((vp, i) => ({
     ...vp,
     slots: vp.slots.map((s) => {
       if (!s.card) return s;
-      const faceUp = (dealReveal && i === state.currentPlayer) || faceUpIds.has(s.card.id);
+      const faceUp =
+        (dealReveal && i === state.currentPlayer && !state.players[i].isBot) ||
+        faceUpIds.has(s.card.id);
       return { card: s.card, known: faceUp };
     }),
   }));
