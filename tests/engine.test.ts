@@ -1,6 +1,7 @@
 // 规则引擎测试：发牌/定牌/摸牌/弃牌/替换/功能牌/跟弃/结算/非法操作
 import { describe, expect, it } from 'vitest';
 import { applyAction, canApply, createGame, settle } from '../src/core/engine';
+import { scoreOf } from '../src/core/score';
 import type { Card, GameState } from '../src/core/types';
 
 function card(rank: Card['rank'], suit: Card['suit'] = 'spades'): Card {
@@ -194,7 +195,7 @@ describe('摸牌与处理', () => {
 });
 
 describe('功能牌', () => {
-  it('7/8 看自己一张牌：写入 knowledge，功能牌进弃牌堆', () => {
+  it('7/8 看自己一张牌：翻看后进入 revealDone 待确认，确认后结束回合', () => {
     const s = makeGame([[card('A'), card('K'), card('2'), card('3')]], {
       deck: [card('7')],
     });
@@ -204,11 +205,14 @@ describe('功能牌', () => {
     expect(g.discardPile).toContainEqual(card('7'));
     g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 1 });
     expect(g.players[0].knowledge[card('K').id]).toEqual(card('K'));
+    expect(g.pending?.kind).toBe('revealDone');
+    if (g.pending?.kind === 'revealDone') expect(g.pending.card).toEqual(card('K'));
+    g = applyAction(g, { type: 'REVEAL_DONE' });
     expect(g.pending).toBeNull();
     expect(g.currentPlayer).toBe(0); // 单人局回到自己
   });
 
-  it('9/10 看别人一张牌：写入查看者 knowledge', () => {
+  it('9/10 看别人一张牌：写入查看者 knowledge，翻看后进入 revealDone', () => {
     const s = makeGame(
       [
         [card('A'), card('2'), card('3'), card('4')],
@@ -222,6 +226,9 @@ describe('功能牌', () => {
     g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 0 });
     expect(g.players[0].knowledge[card('Q').id]).toEqual(card('Q'));
     expect(g.players[1].knowledge[card('Q').id]).toBeUndefined(); // 对方不知道被看
+    expect(g.pending?.kind).toBe('revealDone');
+    g = applyAction(g, { type: 'REVEAL_DONE' });
+    expect(g.pending).toBeNull();
   });
 
   it('J 暗换：交换双方槽位，双方均不知道新牌', () => {
@@ -288,11 +295,11 @@ describe('功能牌', () => {
 });
 
 describe('跟弃', () => {
-  it('弃牌触发跟弃窗口，成功者弃掉同分牌', () => {
+  it('弃牌触发跟弃窗口，点击同分牌的"弃"按钮成功弃掉该牌', () => {
     const s = makeGame(
       [
         [card('10'), card('A'), card('2'), card('3')], // P0 弃 10
-        [card('10'), card('6'), card('7'), card('8')], // P1 有 10
+        [card('10'), card('6'), card('7'), card('8')], // P1 有 10（槽 0）
         [card('Q'), card('Q'), card('Q'), card('Q')], // P2 无 10
       ],
       { deck: [card('10', 'diamonds')] },
@@ -302,8 +309,11 @@ describe('跟弃', () => {
     expect(g.phase).toBe('follow');
     expect(g.follow?.decisions[1]).toBe('pending');
     expect(g.follow?.decisions[2]).toBe('pass');
-    // P1 跟弃成功
-    g = applyAction(g, { type: 'FOLLOW_DISCARD', playerId: 1 });
+    // 日志不出现"触发跟弃"提示，是否跟弃由玩家自行判断
+    expect(g.log.some((e) => e.text.includes('触发跟弃'))).toBe(false);
+    expect(g.log.some((e) => e.text.includes('弃掉了'))).toBe(true);
+    // P1 点击同分牌槽位跟弃成功
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 0 });
     expect(g.players[1].handSlots[0]).toBeNull();
     expect(g.discardPile).toContainEqual(card('10'));
     expect(g.phase).toBe('playing'); // 唯一 pending 决策完，窗口关闭
@@ -313,21 +323,55 @@ describe('跟弃', () => {
     const s = makeGame(
       [
         [card('10'), card('A'), card('2'), card('3')], // P0 弃 10
-        [card('10'), card('6'), card('7'), card('8')], // P1 有 10
-        [card('10'), card('Q'), card('Q'), card('Q')], // P2 有 10
+        [card('10'), card('6'), card('7'), card('8')], // P1 有 10（槽 0）
+        [card('10'), card('Q'), card('Q'), card('Q')], // P2 有 10（槽 0）
       ],
       { deck: [card('10', 'diamonds'), card('9')] }, // 弃的 10 + 补牌用 9
     );
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'DISCARD_DRAWN' });
     // P1 先提交 → 成功
-    g = applyAction(g, { type: 'FOLLOW_DISCARD', playerId: 1 });
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 0 });
     expect(g.players[1].handSlots[0]).toBeNull();
     // P2 后提交 → 失败，补 1 张（9 进空槽）
-    g = applyAction(g, { type: 'FOLLOW_DISCARD', playerId: 2 });
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 2, slot: 0 });
     expect(g.players[2].handSlots).toContainEqual(card('9'));
     expect(g.phase).toBe('playing');
     expect(g.players[2].knowledge[card('9').id]).toBeUndefined(); // 盲摸不知道
+  });
+
+  it('窗口内点错牌（不同分）：跟弃失败惩罚补牌', () => {
+    const s = makeGame(
+      [
+        [card('10'), card('A'), card('2'), card('3')], // P0 弃 10
+        [card('10'), card('6'), card('7'), card('8')], // P1 槽 0 是 10（同分），槽 2 是 7（不同分）
+      ],
+      { deck: [card('10', 'diamonds'), card('9')] },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'DISCARD_DRAWN' });
+    // P1 点错（点了不同分的槽 2）→ 跟弃失败，补 1 张
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 2 });
+    expect(g.players[1].handSlots).toContainEqual(card('9'));
+    expect(g.players[1].handSlots[0]).toEqual(card('10')); // 同分牌未弃
+    expect(g.log.some((e) => e.text.includes('跟弃失败'))).toBe(true);
+    expect(g.phase).toBe('playing'); // 唯一 pending 已决策，窗口关闭
+  });
+
+  it('窗口期外（平时）点击"弃"按钮：跟弃失败惩罚补牌，回合状态不变', () => {
+    const s = makeGame(
+      [
+        [card('A'), card('2'), card('3'), card('4')], // P0 回合开始（无 pending）
+        [card('5'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('9')] },
+    );
+    // 没有跟弃窗口时点击 → 失败 + 补 1 张
+    let g = applyAction(s, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 });
+    expect(g.players[0].handSlots).toContainEqual(card('9'));
+    expect(g.phase).toBe('playing');
+    expect(g.currentPlayer).toBe(0); // 回合不推进
+    expect(g.pending).toBeNull();
   });
 
   it('无人跟弃时窗口由 PASS 关闭', () => {
@@ -357,9 +401,21 @@ describe('跟弃', () => {
     );
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'DISCARD_DRAWN' });
-    g = applyAction(g, { type: 'FOLLOW_DISCARD', playerId: 1 });
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 0 });
     g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 2 });
     expect(g.phase).toBe('playing'); // 直接进入下一回合，无新窗口
+  });
+
+  it('发牌/结算阶段不能尝试跟弃', () => {
+    const deal = createGame({ playerCount: 2, botCount: 1 });
+    expect(canApply(deal, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 })).toBe(false);
+    const ended = settle(
+      makeGame([
+        [card('A'), card('2'), card('3'), card('4')],
+        [card('5'), card('6'), card('7'), card('8')],
+      ]),
+    );
+    expect(canApply(ended, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 })).toBe(false);
   });
 });
 
@@ -416,7 +472,13 @@ describe('状态守恒', () => {
         const pendingId = Number(
           Object.entries(s.follow.decisions).find(([, d]) => d === 'pending')?.[0] ?? -1,
         );
-        s = applyAction(s, { type: 'FOLLOW_DISCARD', playerId: pendingId });
+        const p = s.players[pendingId];
+        const idx = p.handSlots.findIndex((c) => c !== null && scoreOf(c) === s.follow!.targetScore);
+        if (idx >= 0) {
+          s = applyAction(s, { type: 'TRY_FOLLOW', playerId: pendingId, slot: idx });
+        } else {
+          s = applyAction(s, { type: 'PASS_FOLLOW', playerId: pendingId });
+        }
       } else {
         // 简单驱动：能定牌就定，否则摸牌弃牌
         if (s.phase === 'playing' && s.pending === null) {

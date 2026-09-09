@@ -4,6 +4,9 @@
 //  2. 跟弃不连锁：跟弃成功的牌不再触发新的跟弃窗口。
 //  3. 惩罚补牌：从牌堆盲摸一张（不写入 knowledge），手牌满 4 张时追加槽位。
 //  4. final 阶段（定牌后）不能再定牌，且换牌目标不能是已定牌玩家。
+//  5. 点击手牌下方"弃"按钮即尝试跟弃：窗口内 + 该牌同分 + 抢到第一则成功，否则失败惩罚补牌。
+//  6. 7/8、9/10 翻看后进入 revealDone 待确认（UI 限时展示牌面，确认后才结束回合）。
+//  7. 跟弃窗口不主动提示（日志仅记录弃牌信息），是否跟弃由玩家自行判断。
 import type {
   Action,
   Card,
@@ -163,16 +166,19 @@ export function canApply(state: GameState, action: Action): boolean {
     case 'SWAP':
     case 'KEEP':
       return state.pending?.kind === 'confirmReveal';
-    case 'FOLLOW_DISCARD': {
-      if (state.phase !== 'follow' || !state.follow) return false;
-      if (state.follow.decisions[action.playerId] !== 'pending') return false;
-      if (!hasScore(state.players[action.playerId], state.follow.targetScore)) return false;
-      return true;
+    case 'TRY_FOLLOW': {
+      // 点击"弃"按钮 = 尝试跟弃；除发牌/结算外任何时机都允许，引擎判定成败（失败惩罚补牌）
+      if (state.phase === 'deal' || state.phase === 'end') return false;
+      if (state.pending !== null) return false; // 有挂起交互时不响应
+      const me = state.players[action.playerId];
+      return action.slot >= 0 && action.slot < me.handSlots.length && me.handSlots[action.slot] !== null;
     }
     case 'PASS_FOLLOW': {
       if (state.phase !== 'follow' || !state.follow) return false;
       return state.follow.decisions[action.playerId] === 'pending';
     }
+    case 'REVEAL_DONE':
+      return state.pending?.kind === 'revealDone';
     default:
       return false;
   }
@@ -203,10 +209,12 @@ export function applyAction(state: GameState, action: Action): GameState {
       return confirmSwap(state, true);
     case 'KEEP':
       return confirmSwap(state, false);
-    case 'FOLLOW_DISCARD':
-      return followDiscard(state, action.playerId);
+    case 'TRY_FOLLOW':
+      return tryFollow(state, action.playerId, action.slot);
     case 'PASS_FOLLOW':
       return passFollow(state, action.playerId);
+    case 'REVEAL_DONE':
+      return revealDone(state);
     default:
       return state;
   }
@@ -346,13 +354,15 @@ function pickSelfSlot(state: GameState, slot: number): GameState {
   if (!card) return state;
 
   if (pend.purpose === 'view') {
-    // 查看自己一张牌
+    // 查看自己一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
     const updated = addKnowledge(me, card);
     const players = state.players.map((p) => (p.id === me.id ? updated : p));
-    return finishAbility(
-      { ...state, players },
-      `${playerName(state, me.id)} 查看了自己的 ${cardLabel(card)}`,
-    );
+    return {
+      ...state,
+      players,
+      pending: { kind: 'revealDone', card },
+      log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的 ${cardLabel(card)}`)],
+    };
   }
 
   // 选择自己槽位后，进入选择对方槽位
@@ -373,13 +383,15 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
   if (!card) return state;
 
   if (pend.purpose === 'view') {
-    // 查看其他玩家一张牌
+    // 查看其他玩家一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
     const updated = addKnowledge(me, card);
     const players = state.players.map((p) => (p.id === me.id ? updated : p));
-    return finishAbility(
-      { ...state, players },
-      `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的 ${cardLabel(card)}`,
-    );
+    return {
+      ...state,
+      players,
+      pending: { kind: 'revealDone', card },
+      log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的 ${cardLabel(card)}`)],
+    };
   }
 
   // 交换类
@@ -501,59 +513,73 @@ function afterDiscard(state: GameState, discarded: Card): GameState {
     ...state,
     phase: 'follow',
     follow,
-    log: [...state.log, log(state, discarder, `${playerName(state, discarder)} 弃掉了 ${cardLabel(discarded)}，触发跟弃`)],
+    log: [...state.log, log(state, discarder, `${playerName(state, discarder)} 弃掉了 ${cardLabel(discarded)}`)],
   };
 }
 
-// ---- 跟弃 ----
+// ---- 跟弃（点击手牌下方"弃"按钮） ----
 
-function followDiscard(state: GameState, playerId: number): GameState {
+function tryFollow(state: GameState, playerId: number, slot: number): GameState {
   const follow = state.follow;
-  if (!follow) return state;
   const me = state.players[playerId];
-  const first = follow.submitted.length === 0;
+  const card = me.handSlots[slot];
 
-  const decisions: Record<number, FollowDecision> = { ...follow.decisions, [playerId]: 'follow' };
-  const submitted = [...follow.submitted, playerId];
+  // 成功条件：跟弃窗口开着 + 该玩家待决策 + 该牌同分 + 抢先第一个提交
+  const canSucceed =
+    state.phase === 'follow' &&
+    !!follow &&
+    follow.decisions[playerId] === 'pending' &&
+    !!card &&
+    scoreOf(card) === follow.targetScore &&
+    follow.submitted.length === 0;
 
-  let players = state.players;
-  let discardPile = state.discardPile;
-  let deck = state.deck;
-  let extraLog: string;
-
-  if (first) {
-    // 成功：弃掉一张同分牌（canApply 已保证存在）
-    const idx = me.handSlots.findIndex((c) => c !== null && scoreOf(c) === follow.targetScore);
-    const discarded = me.handSlots[idx]!;
+  if (canSucceed) {
     const slots = [...me.handSlots];
-    slots[idx] = null;
-    players = players.map((p) => (p.id === playerId ? { ...p, handSlots: slots } : p));
-    discardPile = [...discardPile, discarded];
-    extraLog = `${playerName(state, playerId)} 跟弃成功，弃掉 ${cardLabel(discarded)}`;
-  } else {
-    // 失败：惩罚补牌
-    const res = addPenaltyCard(me, deck);
-    players = players.map((p) => (p.id === playerId ? res.player : p));
-    deck = res.deck;
-    extraLog = res.got
-      ? `${playerName(state, playerId)} 跟弃失败，被罚补一张牌`
-      : `${playerName(state, playerId)} 跟弃失败，但牌堆已空无法补牌`;
+    slots[slot] = null;
+    const players = state.players.map((p) => (p.id === playerId ? { ...p, handSlots: slots } : p));
+    const nextState: GameState = {
+      ...state,
+      players,
+      discardPile: [...state.discardPile, card],
+      follow: follow
+        ? { ...follow, decisions: { ...follow.decisions, [playerId]: 'follow' }, submitted: [...follow.submitted, playerId] }
+        : null,
+      log: [...state.log, log(state, playerId, `${playerName(state, playerId)} 跟弃成功，弃掉 ${cardLabel(card)}`)],
+    };
+    return closeFollowIfDone(nextState);
   }
 
-  let nextState: GameState = {
+  // 失败：惩罚补牌（点错牌 / 窗口未开 / 抢弃太慢）
+  const res = addPenaltyCard(me, state.deck);
+  const players = state.players.map((p) => (p.id === playerId ? res.player : p));
+  const decisions: Record<number, FollowDecision> | undefined = follow
+    ? { ...follow.decisions, [playerId]: 'follow' }
+    : undefined;
+  const nextState: GameState = {
     ...state,
     players,
-    deck,
-    discardPile,
-    follow: { ...follow, decisions, submitted },
-    log: [...state.log, log(state, playerId, extraLog)],
+    deck: res.deck,
+    follow: follow && decisions ? { ...follow, decisions } : state.follow,
+    log: [
+      ...state.log,
+      log(
+        state,
+        playerId,
+        res.got
+          ? `${playerName(state, playerId)} 跟弃失败，被罚补一张牌`
+          : `${playerName(state, playerId)} 跟弃失败，但牌堆已空无法补牌`,
+      ),
+    ],
   };
+  return closeFollowIfDone(nextState);
+}
 
-  if (isFollowClosed(nextState)) {
-    nextState = { ...nextState, phase: state.phase === 'follow' ? resumePhase(state) : state.phase, follow: null };
-    nextState = endTurn(nextState);
-  }
-  return nextState;
+/** 跟弃窗口若已无待决策玩家则关闭并推进回合 */
+function closeFollowIfDone(state: GameState): GameState {
+  if (state.phase !== 'follow' || !state.follow) return state;
+  if (!isFollowClosed(state)) return state;
+  const next = { ...state, phase: resumePhase(state), follow: null };
+  return endTurn(next);
 }
 
 /** 跟弃窗口关闭后恢复的阶段 */
@@ -581,6 +607,13 @@ function passFollow(state: GameState, playerId: number): GameState {
     nextState = endTurn(nextState);
   }
   return nextState;
+}
+
+// ---- 翻看确认（7/8、9/10） ----
+
+function revealDone(state: GameState): GameState {
+  if (state.pending?.kind !== 'revealDone') return state;
+  return endTurn({ ...state, pending: null });
 }
 
 // ---- 回合推进 ----

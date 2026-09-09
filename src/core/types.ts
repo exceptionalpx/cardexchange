@@ -68,7 +68,8 @@ export type PendingAction =
       otherPlayer: number;
       otherSlot: number;
       otherCard: Card;
-    }; // K 明换：双方牌已展示，决定换/不换
+    } // K 明换：双方牌已展示，决定换/不换
+  | { kind: 'revealDone'; card: Card }; // 7/8、9/10 翻看：牌面已展示，等待确认收起（限时）
 
 export interface LogEntry {
   playerId: number;
@@ -113,5 +114,6 @@ export type Action =
   | { type: 'PICK_OTHER'; playerId: number; slot: number } // 选择其他玩家槽位（viewOther / swap 后半）
   | { type: 'SWAP' } // 明换：确认交换
   | { type: 'KEEP' } // 明换：不交换
-  | { type: 'FOLLOW_DISCARD'; playerId: number } // 跟弃窗口：提交跟弃
-  | { type: 'PASS_FOLLOW'; playerId: number }; // 跟弃窗口：放弃
+  | { type: 'TRY_FOLLOW'; playerId: number; slot: number } // 点击手牌下方"弃"按钮：尝试跟弃（失败则惩罚补牌）
+  | { type: 'PASS_FOLLOW'; playerId: number } // 跟弃窗口：放弃
+  | { type: 'REVEAL_DONE' }; // 翻看确认：收起牌面并结束回合

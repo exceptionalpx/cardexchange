@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameConfigUI } from '../App';
 import type { Action, GameState } from '../core/types';
 import { applyAction, createGame } from '../core/engine';
@@ -18,16 +18,20 @@ interface Props {
 const PHASE_LABEL: Record<GameState['phase'], string> = {
   deal: '发牌（轮流看牌盖牌）',
   playing: '对局中',
-  follow: '跟弃窗口',
+  follow: '对局中', // 跟弃窗口不主动提示，是否跟弃由玩家自行判断
   final: '定牌终局',
   end: '已结束',
 };
+
+const REVEAL_MS = 5000; // 翻看展示限时
+const FOLLOW_WINDOW_MS = 4000; // 跟弃窗口固定时长
 
 export default function GameScreen({ config, onExit }: Props) {
   const [state, setState] = useState<GameState>(() =>
     createGame({ playerCount: config.playerCount, botCount: config.botCount }),
   );
   const [replaceMode, setReplaceMode] = useState(false);
+  const [kDeciding, setKDeciding] = useState(false);
 
   const dispatch = useCallback((a: Action) => {
     setState((s) => applyAction(s, a));
@@ -35,6 +39,7 @@ export default function GameScreen({ config, onExit }: Props) {
 
   const restart = useCallback(() => {
     setReplaceMode(false);
+    setKDeciding(false);
     setState(createGame({ playerCount: config.playerCount, botCount: config.botCount }));
   }, [config]);
 
@@ -51,8 +56,8 @@ export default function GameScreen({ config, onExit }: Props) {
       for (const [idStr, d] of Object.entries(state.follow.decisions)) {
         const id = Number(idStr);
         if (d === 'pending' && state.players[id].isBot) {
-          // 随机延迟模拟"速度最快者成功"
-          const delay = 500 + Math.random() * 1200;
+          // 机器人跟弃反应：0.5~2.5 秒随机，模拟"速度最快者成功"
+          const delay = 500 + Math.random() * 2000;
           timers.push(setTimeout(() => dispatch(aiDecide(state, id)), delay));
         }
       }
@@ -60,13 +65,78 @@ export default function GameScreen({ config, onExit }: Props) {
     return () => timers.forEach(clearTimeout);
   }, [state, dispatch]);
 
+  // ---- 跟弃窗口 4 秒超时：未操作的真人均视为放弃 ----
+  const followStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (state.phase !== 'follow' || !state.follow) {
+      followStartRef.current = null;
+      return;
+    }
+    if (followStartRef.current === null) followStartRef.current = Date.now();
+    const remaining = Math.max(0, FOLLOW_WINDOW_MS - (Date.now() - followStartRef.current));
+    const t = setTimeout(() => {
+      setState((s) => {
+        if (s.phase !== 'follow' || !s.follow) return s;
+        let ns = s;
+        for (const [idStr, d] of Object.entries(s.follow.decisions)) {
+          const id = Number(idStr);
+          if (d === 'pending' && !s.players[id].isBot) {
+            ns = applyAction(ns, { type: 'PASS_FOLLOW', playerId: id });
+          }
+        }
+        return ns;
+      });
+    }, remaining);
+    return () => clearTimeout(t);
+  }, [state.phase, state.follow]);
+
+  // ---- 翻看（7/8、9/10）5 秒限时：到点自动收起 ----
+  useEffect(() => {
+    if (state.pending?.kind !== 'revealDone') return;
+    const t = setTimeout(() => dispatch({ type: 'REVEAL_DONE' }), REVEAL_MS);
+    return () => clearTimeout(t);
+  }, [state.pending, dispatch]);
+
+  // ---- K 明换 5 秒展示后自动进入决定界面 ----
+  useEffect(() => {
+    if (state.pending?.kind !== 'confirmReveal') {
+      setKDeciding(false);
+      return;
+    }
+    const t = setTimeout(() => setKDeciding(true), REVEAL_MS);
+    return () => clearTimeout(t);
+  }, [state.pending]);
+
   // ---- 视角（始终为当前行动玩家，防止热座泄露） ----
   const view = useMemo(() => buildView(state, state.currentPlayer), [state]);
+
+  // 翻看/明换展示中的牌（强制正面）
+  const faceUpIds = useMemo(() => {
+    const set = new Set<string>();
+    if (state.pending?.kind === 'revealDone') set.add(state.pending.card.id);
+    if (state.pending?.kind === 'confirmReveal') {
+      set.add(state.pending.selfCard.id);
+      set.add(state.pending.otherCard.id);
+    }
+    return set;
+  }, [state.pending]);
 
   const pend = state.pending;
   const selectableSelf =
     pend?.kind === 'chooseSelfSlot' || (pend?.kind === 'drawn' && replaceMode);
   const selectableOther = pend?.kind === 'chooseOtherSlot';
+
+  // 当前可操作真人（跟弃窗口：第一个待决策真人；平时：当前真人玩家）
+  const activeHumanId = useMemo(() => {
+    if (state.phase === 'follow' && state.follow) {
+      const e = Object.entries(state.follow.decisions).find(
+        ([id, d]) => d === 'pending' && !state.players[Number(id)].isBot,
+      );
+      return e ? Number(e[0]) : null;
+    }
+    const cur = state.players[state.currentPlayer];
+    return cur.isBot ? null : state.currentPlayer;
+  }, [state]);
 
   function handleSlotClick(playerId: number, slot: number) {
     if (pend?.kind === 'chooseSelfSlot') {
@@ -85,13 +155,16 @@ export default function GameScreen({ config, onExit }: Props) {
     return <ResultScreen state={state} onRestart={restart} onExit={onExit} />;
   }
 
-  // 发牌阶段：当前玩家需要看到自己的真实手牌（knowledge 尚未写入）
+  // 记忆考验：平时一律背面，只有发牌看牌、翻看限时、K 明换展示中的牌正面
   const dealReveal = state.phase === 'deal';
-  const viewPlayers: ViewPlayer[] = view.players.map((vp, i) =>
-    dealReveal && i === state.currentPlayer
-      ? { ...vp, slots: state.players[i].handSlots.map((c) => ({ card: c, known: true })) }
-      : vp,
-  );
+  const viewPlayers: ViewPlayer[] = view.players.map((vp, i) => ({
+    ...vp,
+    slots: vp.slots.map((s) => {
+      if (!s.card) return s;
+      const faceUp = (dealReveal && i === state.currentPlayer) || faceUpIds.has(s.card.id);
+      return { card: s.card, known: faceUp };
+    }),
+  }));
 
   return (
     <div className="game">
@@ -122,6 +195,11 @@ export default function GameScreen({ config, onExit }: Props) {
           <div className="seats">
             {viewPlayers.map((vp) => {
               const declared = state.declaredPlayer === vp.id;
+              const showDiscard =
+                vp.id === activeHumanId &&
+                state.pending === null &&
+                state.phase !== 'deal' &&
+                state.phase !== 'end';
               return (
                 <PlayerSeat
                   key={vp.id}
@@ -133,13 +211,22 @@ export default function GameScreen({ config, onExit }: Props) {
                     (selectableOther && vp.id !== state.currentPlayer)
                   }
                   onSlotClick={(slot) => handleSlotClick(vp.id, slot)}
+                  showDiscard={showDiscard}
+                  onDiscard={(slot) => dispatch({ type: 'TRY_FOLLOW', playerId: vp.id, slot })}
                 />
               );
             })}
           </div>
         </div>
 
-        <ActionPanel state={state} dispatch={dispatch} replaceMode={replaceMode} setReplaceMode={setReplaceMode} />
+        <ActionPanel
+          state={state}
+          dispatch={dispatch}
+          replaceMode={replaceMode}
+          setReplaceMode={setReplaceMode}
+          kDeciding={kDeciding}
+          setKDeciding={setKDeciding}
+        />
 
         <LogPanel state={state} />
       </div>

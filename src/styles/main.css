@@ -331,6 +331,33 @@ body {
   gap: 6px;
 }
 
+/* 卡牌槽位（卡片 + 下方弃牌按钮） */
+.card-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.discard-btn {
+  width: var(--card-w);
+  padding: 3px 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-light);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.discard-btn:hover {
+  background: #ff8a3d;
+  border-color: #ff8a3d;
+  color: #3a1600;
+}
+
 /* ---------- 卡牌 ---------- */
 .card {
   width: var(--card-w);

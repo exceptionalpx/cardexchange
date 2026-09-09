@@ -8,9 +8,18 @@ interface Props {
   dispatch: (a: Action) => void;
   replaceMode: boolean;
   setReplaceMode: (v: boolean) => void;
+  kDeciding: boolean;
+  setKDeciding: (v: boolean) => void;
 }
 
-export default function ActionPanel({ state, dispatch, replaceMode, setReplaceMode }: Props) {
+export default function ActionPanel({
+  state,
+  dispatch,
+  replaceMode,
+  setReplaceMode,
+  kDeciding,
+  setKDeciding,
+}: Props) {
   const current = state.players[state.currentPlayer];
   const pend = state.pending;
 
@@ -27,27 +36,22 @@ export default function ActionPanel({ state, dispatch, replaceMode, setReplaceMo
     );
   }
 
-  // ---- 跟弃窗口 ----
+  // ---- 跟弃窗口：不主动提示，玩家通过日志与手牌下方"弃"按钮自行判断 ----
   if (state.phase === 'follow' && state.follow) {
-    const pendingHuman = Object.entries(state.follow.decisions).find(
-      ([id, d]) => d === 'pending' && !state.players[Number(id)].isBot,
-    );
-    if (!pendingHuman) return <div className="action-panel hint">跟弃窗口开放，等待决策…</div>;
-    const pid = Number(pendingHuman[0]);
-    const target = state.players[pid];
+    return <div className="action-panel" />;
+  }
+
+  // ---- 翻看限时（7/8、9/10） ----
+  if (pend?.kind === 'revealDone') {
+    if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在记忆…</div>;
     return (
       <div className="action-panel">
         <p className="hint">
-          {target.name}：有人弃掉了 {state.lastDiscard ? cardLabel(state.lastDiscard) : ''}（同分可跟弃）
+          记住这张牌：<b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}），5 秒后自动收起
         </p>
-        <div className="btn-row">
-          <button className="btn btn-primary" onClick={() => dispatch({ type: 'FOLLOW_DISCARD', playerId: pid })}>
-            跟弃（弃掉同分牌）
-          </button>
-          <button className="btn" onClick={() => dispatch({ type: 'PASS_FOLLOW', playerId: pid })}>
-            放弃
-          </button>
-        </div>
+        <button className="btn btn-primary" onClick={() => dispatch({ type: 'REVEAL_DONE' })}>
+          记住了，收起
+        </button>
       </div>
     );
   }
@@ -55,12 +59,25 @@ export default function ActionPanel({ state, dispatch, replaceMode, setReplaceMo
   // ---- K 明换确认 ----
   if (pend?.kind === 'confirmReveal') {
     if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在考虑…</div>;
+    const desc = (
+      <p className="hint">
+        K 明换：你的牌 <b>{cardLabel(pend.selfCard)}</b>（{scoreText(pend.selfCard)}） vs 对方{' '}
+        <b>{cardLabel(pend.otherCard)}</b>（{scoreText(pend.otherCard)}）
+      </p>
+    );
+    if (!kDeciding) {
+      return (
+        <div className="action-panel">
+          {desc}
+          <button className="btn btn-primary" onClick={() => setKDeciding(true)}>
+            进入决定
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="action-panel">
-        <p className="hint">
-          K 明换：你的牌 <b>{cardLabel(pend.selfCard)}</b>（{scoreText(pend.selfCard)}） vs 对方{' '}
-          <b>{cardLabel(pend.otherCard)}</b>（{scoreText(pend.otherCard)}）
-        </p>
+        {desc}
         <div className="btn-row">
           <button className="btn btn-primary" onClick={() => dispatch({ type: 'SWAP' })}>
             交换
@@ -76,8 +93,7 @@ export default function ActionPanel({ state, dispatch, replaceMode, setReplaceMo
   // ---- 槽位选择 ----
   if (pend?.kind === 'chooseSelfSlot' || pend?.kind === 'chooseOtherSlot') {
     if (current.isBot) return <div className="action-panel hint">机器人 {current.name} 正在选择…</div>;
-    const targetName =
-      pend.kind === 'chooseOtherSlot' ? `其他玩家的` : '自己的';
+    const targetName = pend.kind === 'chooseOtherSlot' ? '其他玩家的' : '自己的';
     const abilityName: Record<string, string> = {
       '7': '查看自己一张牌',
       '8': '查看自己一张牌',

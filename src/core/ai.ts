@@ -11,10 +11,16 @@ export function aiDecide(state: GameState, playerId: number): Action {
   // 发牌阶段：自动确认盖牌
   if (state.phase === 'deal') return { type: 'CONFIRM_DEAL' };
 
-  // 跟弃窗口
+  // 跟弃窗口：有待决策且有同分牌则尝试跟弃（选第一个同分槽位），否则放弃
   if (state.phase === 'follow' && state.follow) {
-    if (state.follow.decisions[playerId] === 'pending') {
-      return { type: 'FOLLOW_DISCARD', playerId };
+    const follow = state.follow;
+    if (follow.decisions[playerId] === 'pending') {
+      const me = state.players[playerId];
+      const idx = me.handSlots.findIndex((c) => c !== null && scoreOf(c) === follow.targetScore);
+      if (idx >= 0) {
+        const tr: Action = { type: 'TRY_FOLLOW', playerId, slot: idx };
+        if (canApply(state, tr)) return tr;
+      }
     }
     return { type: 'PASS_FOLLOW', playerId };
   }
@@ -85,6 +91,9 @@ function decidePending(state: GameState, playerId: number, pend: PendingAction):
     case 'confirmReveal':
       // 对方牌分数更低才换
       return scoreOf(pend.otherCard) < scoreOf(pend.selfCard) ? { type: 'SWAP' } : { type: 'KEEP' };
+    case 'revealDone':
+      // 机器人无记忆限制，翻看后立即确认收起
+      return { type: 'REVEAL_DONE' };
     default:
       return fallback(state, playerId);
   }
