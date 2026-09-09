@@ -9,7 +9,7 @@ export default function LogPanel({ state }: { state: GameState }) {
 
   return (
     <div className="log-panel" ref={ref}>
-      <div className="pile-label">行动记录</div>
+      <div className="pile-label">游戏进程</div>
       {state.log.slice(-40).map((entry, i) => (
         <div key={i} className={`log-entry ${entry.playerId < 0 ? 'log-system' : ''}`}>
           {entry.text}

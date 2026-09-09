@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { ViewPlayer } from '../core/view';
 import CardView from './CardView';
 
@@ -10,6 +11,8 @@ interface Props {
   /** 是否显示每张手牌下方的"弃"按钮（跟弃用，整局常驻） */
   showDiscard?: boolean;
   onDiscard?: (slot: number) => void;
+  /** 最近换牌换入的槽位（临时标记，3 秒后清除） */
+  swapSlots?: number[];
 }
 
 export default function PlayerSeat({
@@ -20,7 +23,9 @@ export default function PlayerSeat({
   onSlotClick,
   showDiscard,
   onDiscard,
+  swapSlots,
 }: Props) {
+  const swapSet = useMemo(() => new Set(swapSlots ?? []), [swapSlots]);
   return (
     <div className={`seat ${isCurrent ? 'seat-current' : ''} ${isDeclared ? 'seat-declared' : ''}`}>
       <div className="seat-name">
@@ -38,6 +43,7 @@ export default function PlayerSeat({
               onClick={s.card ? () => onSlotClick?.(i) : undefined}
               selectable={selectable && !!s.card}
               highlight={isCurrent}
+              swapMark={swapSet.has(i)}
             />
             {showDiscard && s.card && (
               <button className="discard-btn" onClick={() => onDiscard?.(i)}>

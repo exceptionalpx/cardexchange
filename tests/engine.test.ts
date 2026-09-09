@@ -42,6 +42,7 @@ function makeGame(
     lastDiscard: null,
     follow: null,
     pending: opts.pending ?? null,
+    lastSwap: null,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -351,7 +352,7 @@ describe('跟弃', () => {
   it('弃牌触发跟弃窗口，点击同分牌的"弃"按钮成功弃掉该牌', () => {
     const s = makeGame(
       [
-        [card('10'), card('A'), card('2'), card('3')], // P0 弃 10
+        [card('A'), card('2'), card('3'), card('4')], // P0 弃 10（自身无同分，pass）
         [card('10'), card('6'), card('7'), card('8')], // P1 有 10（槽 0）
         [card('Q'), card('Q'), card('Q'), card('Q')], // P2 无 10
       ],
@@ -375,7 +376,7 @@ describe('跟弃', () => {
   it('多人抢弃：先提交者成功，后提交者失败补牌', () => {
     const s = makeGame(
       [
-        [card('10'), card('A'), card('2'), card('3')], // P0 弃 10
+        [card('A'), card('2'), card('3'), card('4')], // P0 弃 10（自身无同分）
         [card('10'), card('6'), card('7'), card('8')], // P1 有 10（槽 0）
         [card('10'), card('Q'), card('Q'), card('Q')], // P2 有 10（槽 0）
       ],
@@ -396,7 +397,7 @@ describe('跟弃', () => {
   it('窗口内点错牌（不同分）：跟弃失败惩罚补牌', () => {
     const s = makeGame(
       [
-        [card('10'), card('A'), card('2'), card('3')], // P0 弃 10
+        [card('A'), card('2'), card('3'), card('4')], // P0 弃 10（自身无同分）
         [card('10'), card('6'), card('7'), card('8')], // P1 槽 0 是 10（同分），槽 2 是 7（不同分）
       ],
       { deck: [card('10', 'diamonds'), card('9')] },
@@ -430,7 +431,7 @@ describe('跟弃', () => {
   it('无人跟弃时窗口由 PASS 关闭', () => {
     const s = makeGame(
       [
-        [card('10'), card('A'), card('2'), card('3')],
+        [card('A'), card('2'), card('3'), card('4')],
         [card('10'), card('6'), card('7'), card('8')],
         [card('Q'), card('Q'), card('Q'), card('Q')],
       ],
@@ -446,7 +447,7 @@ describe('跟弃', () => {
   it('跟弃成功后不连锁触发新窗口', () => {
     const s = makeGame(
       [
-        [card('10'), card('A'), card('2'), card('3')], // P0 弃 10
+        [card('A'), card('2'), card('3'), card('4')], // P0 弃 10（自身无同分）
         [card('10'), card('6'), card('7'), card('8')], // P1 跟弃 10（弃掉后不再触发）
         [card('10'), card('Q'), card('Q'), card('Q')], // P2 也有 10 但不参与
       ],
@@ -469,6 +470,67 @@ describe('跟弃', () => {
       ]),
     );
     expect(canApply(ended, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 })).toBe(false);
+  });
+
+  it('弃牌者本人也可跟弃（一回合连弃两张同分牌）', () => {
+    const s = makeGame(
+      [
+        [card('10'), card('A'), card('2'), card('3')], // P0 手牌含 10，弃掉摸到的 10 后可跟弃自己的 10
+        [card('Q'), card('Q'), card('Q'), card('Q')], // P1 无 10
+      ],
+      { deck: [card('10', 'diamonds')] },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'DISCARD_DRAWN' });
+    // 弃牌者 P0 也进入 pending（可跟弃自己）
+    expect(g.phase).toBe('follow');
+    expect(g.follow?.decisions[0]).toBe('pending');
+    expect(g.follow?.decisions[1]).toBe('pass');
+    // P0 点击自己手牌中的同分 10 → 跟弃成功，连弃两张
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 });
+    expect(g.players[0].handSlots[0]).toBeNull();
+    expect(g.discardPile.filter((c) => c.rank === '10')).toHaveLength(2);
+    expect(g.phase).toBe('playing');
+  });
+});
+
+describe('换牌标记 lastSwap', () => {
+  it('J 暗换：记录双方换入的槽位', () => {
+    const s = makeGame(
+      [
+        [card('K'), card('A'), card('2'), card('3')],
+        [card('5'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('J')] },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'USE_ABILITY' });
+    g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 0 });
+    g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 0 });
+    expect(g.lastSwap).toEqual({
+      actor: 0,
+      selfPlayer: 0,
+      selfSlot: 0,
+      otherPlayer: 1,
+      otherSlot: 0,
+    });
+  });
+
+  it('K 明换选择不换：不记录 lastSwap', () => {
+    const s = makeGame(
+      [
+        [card('K'), card('A'), card('2'), card('3')],
+        [card('5'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('K')] },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'USE_ABILITY' });
+    g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 0 });
+    g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 0 });
+    expect(g.pending?.kind).toBe('confirmReveal');
+    g = applyAction(g, { type: 'KEEP' });
+    expect(g.lastSwap).toBeNull();
   });
 });
 

@@ -56,6 +56,8 @@ export default function GameScreen({ config, onExit }: Props) {
   );
   const [replaceMode, setReplaceMode] = useState(false);
   const [kDeciding, setKDeciding] = useState(false);
+  // 最近一次换牌换入的槽位标记（展示 3 秒后清除，不持续）
+  const [swapMark, setSwapMark] = useState<{ playerId: number; slot: number }[] | null>(null);
 
   const dispatch = useCallback((a: Action) => {
     setState((s) => applyAction(s, a));
@@ -64,8 +66,21 @@ export default function GameScreen({ config, onExit }: Props) {
   const restart = useCallback(() => {
     setReplaceMode(false);
     setKDeciding(false);
+    setSwapMark(null);
     setState(createGame({ playerCount: config.playerCount, botCount: config.botCount }));
   }, [config]);
+
+  // ---- 换牌标记：监听 lastSwap 变化，高亮双方换入的槽位 3 秒后自动清除 ----
+  useEffect(() => {
+    if (!state.lastSwap) return;
+    const { selfPlayer, selfSlot, otherPlayer, otherSlot } = state.lastSwap;
+    setSwapMark([
+      { playerId: selfPlayer, slot: selfSlot },
+      { playerId: otherPlayer, slot: otherSlot },
+    ]);
+    const t = setTimeout(() => setSwapMark(null), 3000);
+    return () => clearTimeout(t);
+  }, [state.lastSwap]);
 
   // ---- 机器人自动行动调度 ----
   useEffect(() => {
@@ -205,6 +220,18 @@ export default function GameScreen({ config, onExit }: Props) {
         </button>
       </div>
 
+      <div className="rules-panel">
+        <div className="pile-label">规则</div>
+        <ul>
+          <li>定牌后手牌总分<b>最小</b>者胜（并列同胜）</li>
+          <li>大小王 0 分 · ♥K -1 分 · A~K = 1~13</li>
+          <li>7/8 看自己 · 9/10 看别人 · J/Q 暗换 · K 明换</li>
+          <li>弃牌不补牌；同分可跟弃，抢先成功，失败罚补 1 张</li>
+          <li>自己回合可定牌，其余人各操作一轮后终局</li>
+          <li>牌堆耗尽：总分最低者胜</li>
+        </ul>
+      </div>
+
       <div className="game-main">
         <div className="table">
           <div className="center-area">
@@ -236,6 +263,7 @@ export default function GameScreen({ config, onExit }: Props) {
                   onSlotClick={(slot) => handleSlotClick(vp.id, slot)}
                   showDiscard={showDiscard}
                   onDiscard={(slot) => dispatch({ type: 'TRY_FOLLOW', playerId: vp.id, slot })}
+                  swapSlots={swapMark?.filter((m) => m.playerId === vp.id).map((m) => m.slot)}
                 />
               );
             })}

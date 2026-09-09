@@ -104,6 +104,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     lastDiscard: null,
     follow: null,
     pending: null,
+    lastSwap: null,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -463,7 +464,17 @@ function swapCards(
   });
 
   return finishAbility(
-    { ...state, players },
+    {
+      ...state,
+      players,
+      lastSwap: {
+        actor: me.id,
+        selfPlayer: me.id,
+        selfSlot,
+        otherPlayer: otherPlayerId,
+        otherSlot,
+      },
+    },
     `${playerName(state, me.id)} 与 ${playerName(state, otherPlayerId)} ${label}`,
   );
 }
@@ -493,11 +504,8 @@ function afterDiscard(state: GameState, discarded: Card): GameState {
   const decisions: Record<number, FollowDecision> = {};
   let hasPending = false;
 
+  // 弃牌者本人也可参与跟弃（允许一回合内连弃两张同分牌）
   for (const p of state.players) {
-    if (p.id === discarder) {
-      decisions[p.id] = 'pass';
-      continue;
-    }
     if (hasScore(p, score)) {
       decisions[p.id] = 'pending';
       hasPending = true;

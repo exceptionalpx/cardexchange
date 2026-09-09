@@ -87,6 +87,14 @@ export interface GameState {
   lastDiscard: Card | null;
   follow: FollowState | null;
   pending: PendingAction | null;
+  /** 最近一次换牌（暗换 J/Q、明换 K 交换）双方换入的槽位，UI 据此标记 3 秒 */
+  lastSwap: {
+    actor: number;
+    selfPlayer: number;
+    selfSlot: number;
+    otherPlayer: number;
+    otherSlot: number;
+  } | null;
   /** 定牌后剩余待操作轮次（不含定牌玩家） */
   finalRemaining: number;
   winner: number[] | null;

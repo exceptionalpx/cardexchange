@@ -19,9 +19,11 @@ interface Props {
   onClick?: () => void;
   selectable?: boolean;
   highlight?: boolean;
+  /** 最近换牌换入标记（3 秒临时） */
+  swapMark?: boolean;
 }
 
-export default function CardView({ card, known, faceUp, onClick, selectable, highlight }: Props) {
+export default function CardView({ card, known, faceUp, onClick, selectable, highlight, swapMark }: Props) {
   if (!card) {
     return <div className="card card-empty" />;
   }
@@ -31,6 +33,7 @@ export default function CardView({ card, known, faceUp, onClick, selectable, hig
   if (!show) classes.push('card-back');
   if (selectable) classes.push('card-selectable');
   if (highlight) classes.push('card-highlight');
+  if (swapMark) classes.push('card-swap-mark');
   if (show && isRed(card)) classes.push('card-red');
 
   if (!show) {
