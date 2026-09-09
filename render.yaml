@@ -1,0 +1,10 @@
+# Render Blueprint - 换牌王联机版
+# 免费实例 + Docker 构建 + 新加坡节点（国内访问较优）
+services:
+  - type: web
+    name: cardexchange
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
