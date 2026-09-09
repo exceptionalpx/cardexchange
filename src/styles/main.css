@@ -563,9 +563,16 @@ body {
 }
 
 @media (max-width: 900px) {
-  .log-panel,
+  /* 中窄屏：面板仍常驻可见，仅压缩宽度，避免遮挡牌桌 */
+  .log-panel {
+    width: 188px;
+    padding: 10px;
+  }
   .rules-panel {
-    display: none;
+    width: 172px;
+    padding: 8px 10px;
+    font-size: 10.5px;
+    line-height: 1.5;
   }
   :root {
     --card-w: 56px;
@@ -573,5 +580,13 @@ body {
   }
   .seat {
     min-width: 150px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* 手机极窄屏：固定面板会挤占牌桌，隐藏（规则可在主菜单查看） */
+  .log-panel,
+  .rules-panel {
+    display: none;
   }
 }

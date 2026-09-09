@@ -161,18 +161,6 @@ export default function GameScreen({ config, onExit }: Props) {
     pend?.kind === 'chooseSelfSlot' || (pend?.kind === 'drawn' && replaceMode);
   const selectableOther = pend?.kind === 'chooseOtherSlot';
 
-  // 当前可操作真人（跟弃窗口：第一个待决策真人；平时：当前真人玩家）
-  const activeHumanId = useMemo(() => {
-    if (state.phase === 'follow' && state.follow) {
-      const e = Object.entries(state.follow.decisions).find(
-        ([id, d]) => d === 'pending' && !state.players[Number(id)].isBot,
-      );
-      return e ? Number(e[0]) : null;
-    }
-    const cur = state.players[state.currentPlayer];
-    return cur.isBot ? null : state.currentPlayer;
-  }, [state]);
-
   function handleSlotClick(playerId: number, slot: number) {
     if (pend?.kind === 'chooseSelfSlot') {
       if (playerId === state.currentPlayer) dispatch({ type: 'PICK_SELF_SLOT', slot });
@@ -245,11 +233,10 @@ export default function GameScreen({ config, onExit }: Props) {
           <div className="seats">
             {viewPlayers.map((vp) => {
               const declared = state.declaredPlayer === vp.id;
+              // 弃牌按钮：所有真人座位整局常驻（对手弃牌时可立即跟弃反应）；
+              // 发牌/结算阶段无跟弃意义，不显示
               const showDiscard =
-                vp.id === activeHumanId &&
-                state.pending === null &&
-                state.phase !== 'deal' &&
-                state.phase !== 'end';
+                !vp.isBot && state.phase !== 'deal' && state.phase !== 'end';
               return (
                 <PlayerSeat
                   key={vp.id}
