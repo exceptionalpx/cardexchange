@@ -1,0 +1,21 @@
+# 换牌王 - Fly.io 部署配置（免费额度友好：空闲自动休眠，访问自动唤醒）
+app = "cardexchange"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3001"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 500
