@@ -136,7 +136,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   return (
     <div className="menu lobby">
       <h1 className="menu-title">♠ 联机对战 ♥</h1>
-      <p className="menu-sub">电脑本机运行服务器，朋友连同一 WiFi/热点即可同局对战</p>
+      <p className="menu-sub">公网联机 · 把房间码发给朋友，即可随时同局对战</p>
 
       <div className="menu-section">
         <label>昵称</label>
