@@ -26,6 +26,30 @@ const PHASE_LABEL: Record<GameState['phase'], string> = {
 const REVEAL_MS = 5000; // 翻看展示限时
 const FOLLOW_WINDOW_MS = 4000; // 跟弃窗口固定时长
 
+/**
+ * 计算翻看/明换展示中需要强制正面的牌。
+ * 信息隐藏：只有"真人"发动者（revealDone.viewer / confirmReveal 时 currentPlayer）能看到牌面；
+ * 机器人发动的翻看/明换不向玩家亮牌，玩家只能通过行为推理。
+ */
+export function computeFaceUpIds(
+  pending: GameState['pending'],
+  players: GameState['players'],
+  currentPlayer: number,
+): Set<string> {
+  const set = new Set<string>();
+  const viewerIsBot =
+    (pending?.kind === 'revealDone' && players[pending.viewer].isBot) ||
+    (pending?.kind === 'confirmReveal' && players[currentPlayer].isBot);
+  if (pending?.kind === 'revealDone' && !viewerIsBot) {
+    set.add(pending.card.id);
+  }
+  if (pending?.kind === 'confirmReveal' && !viewerIsBot) {
+    set.add(pending.selfCard.id);
+    set.add(pending.otherCard.id);
+  }
+  return set;
+}
+
 export default function GameScreen({ config, onExit }: Props) {
   const [state, setState] = useState<GameState>(() =>
     createGame({ playerCount: config.playerCount, botCount: config.botCount }),
@@ -111,15 +135,11 @@ export default function GameScreen({ config, onExit }: Props) {
   const view = useMemo(() => buildView(state, state.currentPlayer), [state]);
 
   // 翻看/明换展示中的牌（强制正面）
-  const faceUpIds = useMemo(() => {
-    const set = new Set<string>();
-    if (state.pending?.kind === 'revealDone') set.add(state.pending.card.id);
-    if (state.pending?.kind === 'confirmReveal') {
-      set.add(state.pending.selfCard.id);
-      set.add(state.pending.otherCard.id);
-    }
-    return set;
-  }, [state.pending]);
+  // 信息隐藏：机器人发动的翻看/明换不向玩家亮牌（只有发动者能看到，玩家只能通过行为推理）
+  const faceUpIds = useMemo(
+    () => computeFaceUpIds(state.pending, state.players, state.currentPlayer),
+    [state.pending, state.currentPlayer, state.players],
+  );
 
   const pend = state.pending;
   const selectableSelf =

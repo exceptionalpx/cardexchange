@@ -231,6 +231,59 @@ describe('功能牌', () => {
     expect(g.pending).toBeNull();
   });
 
+  it('信息隐藏：机器人翻看/明换的日志不透露牌面，且 revealDone 记录查看者', () => {
+    // 机器人查看自己（7/8）：日志无牌面，viewer 记录查看者
+    let g = makeGame([[card('A'), card('K'), card('2'), card('3')]], {
+      deck: [card('7')],
+    });
+    g = applyAction(g, { type: 'DRAW' });
+    g = applyAction(g, { type: 'USE_ABILITY' });
+    g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 1 });
+    expect(g.pending?.kind).toBe('revealDone');
+    if (g.pending?.kind === 'revealDone') expect(g.pending.viewer).toBe(0);
+    expect(g.log.at(-1)?.text).toBe('P0 查看了自己的一张牌');
+    expect(g.log.at(-1)?.text).not.toContain('♠K');
+
+    // 机器人查看别人（9/10）：日志无牌面
+    const s2 = makeGame(
+      [
+        [card('A'), card('2'), card('3'), card('4')],
+        [card('Q'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('9')] },
+    );
+    let g2 = applyAction(s2, { type: 'DRAW' });
+    g2 = applyAction(g2, { type: 'USE_ABILITY' });
+    g2 = applyAction(g2, { type: 'PICK_OTHER', playerId: 1, slot: 0 });
+    expect(g2.log.at(-1)?.text).toBe('P0 查看了 P1 的一张牌');
+    expect(g2.log.at(-1)?.text).not.toContain('♠Q');
+
+    // 机器人 K 明换：日志无对方牌面
+    const s3 = makeGame(
+      [
+        [card('K'), card('A'), card('2'), card('3')],
+        [card('5'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('K')] },
+    );
+    let g3 = applyAction(s3, { type: 'DRAW' });
+    g3 = applyAction(g3, { type: 'USE_ABILITY' });
+    g3 = applyAction(g3, { type: 'PICK_SELF_SLOT', slot: 0 });
+    g3 = applyAction(g3, { type: 'PICK_OTHER', playerId: 1, slot: 0 });
+    expect(g3.log.at(-1)?.text).toBe('P0 使用 K 明换，查看了 P1 的一张牌');
+    expect(g3.log.at(-1)?.text).not.toContain('♠5');
+
+    // 真人查看自己（7/8）：日志保留牌面（真人需要记忆）
+    const s4 = makeGame([[card('A'), card('K'), card('2'), card('3')]], {
+      deck: [card('7')],
+    });
+    s4.players[0] = { ...s4.players[0], isBot: false };
+    let g4 = applyAction(s4, { type: 'DRAW' });
+    g4 = applyAction(g4, { type: 'USE_ABILITY' });
+    g4 = applyAction(g4, { type: 'PICK_SELF_SLOT', slot: 1 });
+    expect(g4.log.at(-1)?.text).toBe('P0 查看了自己的 ♠K');
+  });
+
   it('J 暗换：交换双方槽位，双方均不知道新牌', () => {
     const s = makeGame(
       [

@@ -1,6 +1,81 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import GameScreen from '../src/components/GameScreen';
+import GameScreen, { computeFaceUpIds } from '../src/components/GameScreen';
+import type { PlayerState } from '../src/core/types';
+
+function botPlayer(id: number): PlayerState {
+  return { id, name: `机器人${id + 1}`, isBot: true, handSlots: [], knowledge: {} };
+}
+function humanPlayer(id: number): PlayerState {
+  return { ...botPlayer(id), isBot: false, name: `玩家${id + 1}` };
+}
+
+describe('computeFaceUpIds 翻看信息隐藏', () => {
+  const cardA = { id: 'hA', suit: 'hearts' as const, rank: 'A' as const };
+  const cardK = { id: 'sK', suit: 'spades' as const, rank: 'K' as const };
+
+  it('真人发动 9/10 翻看：被查看的牌强制正面', () => {
+    const players = [humanPlayer(0), botPlayer(1)];
+    const ids = computeFaceUpIds(
+      { kind: 'revealDone', card: cardA, viewer: 0 },
+      players,
+      0,
+    );
+    expect(ids.has('hA')).toBe(true);
+  });
+
+  it('机器人发动 9/10 翻看：被查看的牌不亮出（玩家看不到）', () => {
+    const players = [humanPlayer(0), botPlayer(1)];
+    const ids = computeFaceUpIds(
+      { kind: 'revealDone', card: cardA, viewer: 1 },
+      players,
+      1,
+    );
+    expect(ids.has('hA')).toBe(false);
+  });
+
+  it('真人 K 明换：双方两张牌强制正面', () => {
+    const players = [humanPlayer(0), botPlayer(1)];
+    const ids = computeFaceUpIds(
+      {
+        kind: 'confirmReveal',
+        selfSlot: 0,
+        selfCard: cardK,
+        otherPlayer: 1,
+        otherSlot: 0,
+        otherCard: cardA,
+      },
+      players,
+      0,
+    );
+    expect(ids.has('sK')).toBe(true);
+    expect(ids.has('hA')).toBe(true);
+  });
+
+  it('机器人 K 明换：双方牌都不亮出', () => {
+    const players = [humanPlayer(0), botPlayer(1)];
+    const ids = computeFaceUpIds(
+      {
+        kind: 'confirmReveal',
+        selfSlot: 0,
+        selfCard: cardK,
+        otherPlayer: 0,
+        otherSlot: 0,
+        otherCard: cardA,
+      },
+      players,
+      1,
+    );
+    expect(ids.has('sK')).toBe(false);
+    expect(ids.has('hA')).toBe(false);
+  });
+
+  it('非翻看/明换 pending：不强制任何牌', () => {
+    const players = [humanPlayer(0), botPlayer(1)];
+    const ids = computeFaceUpIds({ kind: 'drawn', card: cardA }, players, 0);
+    expect(ids.size).toBe(0);
+  });
+});
 
 // 信息隐藏回归测试：发牌阶段机器人看牌时绝不亮牌（玩家不得通过热座视角偷看机器人手牌）
 function renderGame() {
@@ -12,7 +87,7 @@ function renderGame() {
 /** 已亮牌面文字（如 ♥5），即信息泄露信号；无牌面时返回空数组（不抛错） */
 function faceLabels(): string[] {
   return screen
-    .queryAllByText(/^[♠♥♦♣]|^大小王/)
+    .queryAllByText(/^[♠♥♦♣]|^(大王|小王)/)
     .map((el) => el.textContent || '');
 }
 

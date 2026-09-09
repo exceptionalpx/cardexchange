@@ -69,7 +69,7 @@ export type PendingAction =
       otherSlot: number;
       otherCard: Card;
     } // K 明换：双方牌已展示，决定换/不换
-  | { kind: 'revealDone'; card: Card }; // 7/8、9/10 翻看：牌面已展示，等待确认收起（限时）
+  | { kind: 'revealDone'; card: Card; viewer: number }; // 7/8、9/10 翻看：牌面已展示，等待确认收起（限时）；viewer 为查看者（机器人查看不向玩家亮牌）
 
 export interface LogEntry {
   playerId: number;
