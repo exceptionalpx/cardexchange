@@ -14,7 +14,6 @@ import ResultScreen from './ResultScreen';
 import SwapAnim from './SwapAnim';
 import MoveAnim from './MoveAnim';
 import PeekAnim from './PeekAnim';
-import { cardLabel } from './CardView';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
 export interface OnlineGameProps {
@@ -222,14 +221,6 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
   const deckCount = isOnline && online ? online.view.deckCount : state.deck.length;
   const pend = state.pending;
-  // 跟弃窗口提示：窗口开启即显示（固定于最新弃牌上方），不依赖自己是否同分——判断留给玩家记忆
-  const followHint = useMemo(() => {
-    if (state.phase !== 'follow' || !state.follow || !state.lastDiscard) return null;
-    return {
-      name: state.players[state.follow.discarder]?.name ?? '',
-      cardLabel: cardLabel(state.lastDiscard),
-    };
-  }, [state]);
   const selectableSelf =
     pend?.kind === 'chooseSelfSlot' ||
     pend?.kind === 'chooseSwap' ||
@@ -346,8 +337,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
               </div>
               <div className="deck-count">{deckCount} 张</div>
             </div>
-            {/* 跟弃窗口提示：固定显示在最新弃牌正上方（常亮"可跟弃"标签） */}
-            <DiscardPile state={state} followHint={followHint} />
+            {/* "可跟弃"标签：始终固定在最新弃牌（黑框牌）正上方 */}
+            <DiscardPile state={state} />
             <UsedPile state={state} />
           </div>
 
