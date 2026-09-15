@@ -6,8 +6,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { GameState } from '../core/types';
 import PawSvg from './Paw';
 
-const DURATION = 1500;
-
 interface Rect {
   x: number;
   y: number;
@@ -20,6 +18,9 @@ interface AnimPlan {
   selfTo: Rect;
   otherFrom: Rect;
   otherTo: Rect;
+  /** 空槽恢复用：双方槽位定位键（player-slot） */
+  selfKey: string;
+  otherKey: string;
 }
 
 export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap'] }) {
@@ -51,20 +52,18 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
       selfTo: { x: or.left, y: or.top, w: or.width, h: or.height },
       otherFrom: { x: or.left, y: or.top, w: or.width, h: or.height },
       otherTo: { x: sr.left, y: sr.top, w: sr.width, h: sr.height },
+      selfKey: `${lastSwap.selfPlayer}-${lastSwap.selfSlot}`,
+      otherKey: `${lastSwap.otherPlayer}-${lastSwap.otherSlot}`,
     });
-    const t = setTimeout(() => {
-      setPlan(null);
-      selfCard.classList.remove('slot-hide');
-      otherCard.classList.remove('slot-hide');
-    }, DURATION);
+    // 空槽恢复交给播放 effect（动画播完即恢复）
     return () => {
-      clearTimeout(t);
       selfCard.classList.remove('slot-hide');
       otherCard.classList.remove('slot-hide');
     };
   }, [lastSwap]);
 
-  // 播放位移动画（WAAPI）：自己牌+猫爪先飞，对方牌延迟反向飞
+  // 播放位移动画（WAAPI）：自己牌+猫爪先飞，对方牌延迟反向飞；
+  // 播完（finished）立即恢复空槽并清理动画层，避免"小牌停留/跳回"残留
   useEffect(() => {
     if (!plan) return;
     const paw = pawRef.current;
@@ -76,14 +75,14 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
     const mx = dx / 2;
     const my = Math.min(plan.selfFrom.y, plan.selfTo.y) - 80 - plan.selfFrom.y;
 
-    paw.animate(
+    const a1 = paw.animate(
       [
         { transform: 'translate(0px, 0px) scale(1)' },
         { transform: `translate(${mx}px, ${my}px) scale(1.05)`, offset: 0.45 },
         { transform: `translate(${dx}px, ${dy}px) scale(1.12)`, offset: 0.92 },
         { transform: `translate(${dx}px, ${dy}px) scale(1)`, offset: 1 },
       ],
-      { duration: 1150, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+      { duration: 1150, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
     );
 
     const odx = plan.otherTo.x - plan.otherFrom.x;
@@ -91,15 +90,41 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
     const omx = odx / 2;
     const omy = Math.min(plan.otherFrom.y, plan.otherTo.y) - 80 - plan.otherFrom.y;
 
-    other.animate(
+    const a2 = other.animate(
       [
         { transform: 'translate(0px, 0px) scale(1)' },
         { transform: `translate(${omx}px, ${omy}px) scale(1.05)`, offset: 0.5 },
         { transform: `translate(${odx}px, ${ody}px) scale(1.12)`, offset: 0.94 },
         { transform: `translate(${odx}px, ${ody}px) scale(1)`, offset: 1 },
       ],
-      { duration: 900, delay: 260, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+      { duration: 900, delay: 260, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
     );
+
+    const restoreSlots = () => {
+      const selfCard = document.querySelector(
+        `[data-player="${plan.selfKey.split('-')[0]}"][data-slot="${plan.selfKey.split('-')[1]}"] .card`,
+      );
+      const otherCard = document.querySelector(
+        `[data-player="${plan.otherKey.split('-')[0]}"][data-slot="${plan.otherKey.split('-')[1]}"] .card`,
+      );
+      selfCard?.classList.remove('slot-hide');
+      otherCard?.classList.remove('slot-hide');
+    };
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      restoreSlots();
+      setPlan(null);
+    };
+    Promise.allSettled([a1.finished, a2.finished]).then(cleanup);
+    const t = setTimeout(cleanup, 2200);
+    return () => {
+      clearTimeout(t);
+      a1.cancel();
+      a2.cancel();
+      restoreSlots();
+    };
   }, [plan]);
 
   if (!plan) return null;

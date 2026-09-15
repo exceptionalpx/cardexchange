@@ -8,8 +8,6 @@ import type { Card, GameState } from '../core/types';
 import PawSvg from './Paw';
 import CardView from './CardView';
 
-const DURATION = 1500;
-
 interface Rect {
   x: number;
   y: number;
@@ -78,12 +76,8 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
       base.hideEl.classList.add('slot-hide');
     }
     setPlan(base);
-    const t = setTimeout(() => {
-      setPlan(null);
-      base.hideEl?.classList.remove('slot-hide');
-    }, DURATION);
+    // 动画层清理交给播放 effect（finished 驱动）；这里兜底恢复槽位牌
     return () => {
-      clearTimeout(t);
       base.hideEl?.classList.remove('slot-hide');
     };
   }, [lastMove]);
@@ -111,40 +105,42 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
       targetPlayer: lastPenalty.actor,
       targetSlot: lastPenalty.slot,
     });
-    const t = setTimeout(() => setPlan(null), DURATION);
-    return () => clearTimeout(t);
   }, [lastPenalty]);
 
-  // 播放动画
+  // 播放动画；播完（finished）立即清理动画层，避免"小牌停留/跳回"残留
   useEffect(() => {
     if (!plan) return;
+    const anims: Animation[] = [];
+
     if (plan.kind === 'discard') {
       const fly = flyRef.current;
       if (!fly) return;
       const dx = plan.discard.x - plan.seat.x;
       const dy = plan.discard.y - plan.seat.y;
-      fly.animate(
-        [
-          { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
-          { transform: `translate(${dx / 2}px, ${dy / 2 - 70}px) scale(1.04)`, offset: 0.5, opacity: 1 },
-          { transform: `translate(${dx}px, ${dy}px) scale(0.72)`, offset: 1, opacity: 0.9 },
-        ],
-        { duration: 850, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+      anims.push(
+        fly.animate(
+          [
+            { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+            { transform: `translate(${dx / 2}px, ${dy / 2 - 70}px) scale(1.04)`, offset: 0.5, opacity: 1 },
+            { transform: `translate(${dx}px, ${dy}px) scale(0.72)`, offset: 1, opacity: 0.9 },
+          ],
+          { duration: 850, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+        ),
       );
-      return;
-    }
-    if (plan.kind === 'penalty') {
+    } else if (plan.kind === 'penalty') {
       const fly = flyRef.current;
       if (!fly) return;
       const dx = plan.discard.x - plan.seat.x;
       const dy = plan.discard.y - plan.seat.y;
-      fly.animate(
-        [
-          { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
-          { transform: `translate(${dx / 2}px, ${dy / 2 - 60}px) scale(1.05)`, offset: 0.5, opacity: 1 },
-          { transform: `translate(${dx}px, ${dy}px) scale(0.95)`, offset: 1, opacity: 1 },
-        ],
-        { duration: 800, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+      anims.push(
+        fly.animate(
+          [
+            { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+            { transform: `translate(${dx / 2}px, ${dy / 2 - 60}px) scale(1.05)`, offset: 0.5, opacity: 1 },
+            { transform: `translate(${dx}px, ${dy}px) scale(0.95)`, offset: 1, opacity: 1 },
+          ],
+          { duration: 800, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+        ),
       );
       // 落位后槽位短暂高亮"罚牌"
       if (plan.targetPlayer !== undefined && plan.targetSlot !== undefined) {
@@ -156,33 +152,53 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
           setTimeout(() => slotCard.classList.remove('penalty-flash'), 1300);
         }
       }
-      return;
+    } else {
+      // replace：猫爪送新牌（背面）进槽位（先落定，约 0.75s）→ 停顿 → 旧牌弹出到弃牌堆（后走，主次分明不交叉）
+      const paw = pawRef.current;
+      const oldCard = oldRef.current;
+      if (!paw || !oldCard || !plan.slot) return;
+      const dx = plan.slot.x - plan.seat.x;
+      const dy = plan.slot.y - plan.seat.y;
+      anims.push(
+        paw.animate(
+          [
+            { transform: 'translate(0px, 0px) scale(1)' },
+            { transform: `translate(${dx / 2}px, ${dy / 2 - 70}px) scale(1.05)`, offset: 0.5 },
+            { transform: `translate(${dx}px, ${dy}px) scale(1.1)`, offset: 0.92 },
+            { transform: `translate(${dx}px, ${dy}px) scale(1)`, offset: 1 },
+          ],
+          { duration: 750, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+        ),
+      );
+      const odx = plan.discard.x - plan.slot.x;
+      const ody = plan.discard.y - plan.slot.y;
+      anims.push(
+        oldCard.animate(
+          [
+            { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+            { transform: `translate(${odx / 2}px, ${ody / 2 - 60}px) scale(1.04)`, offset: 0.5, opacity: 1 },
+            { transform: `translate(${odx}px, ${ody}px) scale(0.72)`, offset: 1, opacity: 0.9 },
+          ],
+          { duration: 700, delay: 450, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+        ),
+      );
     }
-    // replace：猫爪送新牌（背面）进槽位（先落定，约 0.75s）→ 停顿 → 旧牌弹出到弃牌堆（后走，主次分明不交叉）
-    const paw = pawRef.current;
-    const oldCard = oldRef.current;
-    if (!paw || !oldCard || !plan.slot) return;
-    const dx = plan.slot.x - plan.seat.x;
-    const dy = plan.slot.y - plan.seat.y;
-    paw.animate(
-      [
-        { transform: 'translate(0px, 0px) scale(1)' },
-        { transform: `translate(${dx / 2}px, ${dy / 2 - 70}px) scale(1.05)`, offset: 0.5 },
-        { transform: `translate(${dx}px, ${dy}px) scale(1.1)`, offset: 0.92 },
-        { transform: `translate(${dx}px, ${dy}px) scale(1)`, offset: 1 },
-      ],
-      { duration: 750, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
-    );
-    const odx = plan.discard.x - plan.slot.x;
-    const ody = plan.discard.y - plan.slot.y;
-    oldCard.animate(
-      [
-        { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
-        { transform: `translate(${odx / 2}px, ${ody / 2 - 60}px) scale(1.04)`, offset: 0.5, opacity: 1 },
-        { transform: `translate(${odx}px, ${ody}px) scale(0.72)`, offset: 1, opacity: 0.9 },
-      ],
-      { duration: 700, delay: 450, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
-    );
+
+    // 动画全部播完立即清理（不再等待固定时长）；兜底定时器防止后台页动画暂停导致永不触发
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      plan.hideEl?.classList.remove('slot-hide');
+      setPlan(null);
+    };
+    Promise.allSettled(anims.map((a) => a.finished)).then(cleanup);
+    const t = setTimeout(cleanup, 2200);
+    return () => {
+      clearTimeout(t);
+      anims.forEach((a) => a.cancel());
+      plan.hideEl?.classList.remove('slot-hide');
+    };
   }, [plan]);
 
   if (!plan) return null;
