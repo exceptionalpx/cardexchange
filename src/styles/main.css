@@ -437,7 +437,7 @@ body {
   color: #ffe9a8;
 }
 
-/* ---------- 摸到的牌展示（放大牌面 + 功能徽章） ---------- */
+/* ---------- 摸到的牌展示（放大牌面，功能直接印在牌面上） ---------- */
 .drawn-card {
   position: relative;
   transform: scale(1.15);
@@ -450,19 +450,21 @@ body {
   font-size: 20px;
 }
 
-.drawn-ability {
+/* 功能牌牌面底部标注（看自己牌/看他人牌/暗换/明换） */
+.card-footnote {
   position: absolute;
-  left: 50%;
-  bottom: -22px;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  padding: 3px 10px;
-  border-radius: 999px;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  padding: 2px 0;
+  border-radius: 4px;
   background: #ff8a3d;
   color: #fff;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 /* ---------- 飞行白卡（弃牌/替换动画中的"一张牌"副本） ---------- */

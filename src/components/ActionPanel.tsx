@@ -145,13 +145,9 @@ export default function ActionPanel({
       return (
         <div className="action-panel">
           <div className="drawn-card">
-            <CardView card={pend.card} known faceUp />
-            {ability && <span className="drawn-ability">{ability}</span>}
+            <CardView card={pend.card} known faceUp footNote={ability ?? undefined} />
           </div>
-          <p className="hint">
-            {current.name} 摸到了 <b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}）
-            {ability ? ` · 功能：${ability}` : ''}，请选择处理方式：
-          </p>
+          <p className="hint">请选择处理方式：</p>
           <div className="btn-row">
             {canAbility && (
               <button className="btn btn-primary" onClick={() => dispatch({ type: 'USE_ABILITY' })}>
@@ -202,20 +198,20 @@ function scoreText(card: Card): string {
   return score > 0 ? `+${score}分` : `${score}分`;
 }
 
-/** 功能牌说明（无功能的普通牌返回空） */
+/** 功能牌短标注（直接印在牌面上；无功能的普通牌返回空） */
 function abilityDesc(card: Card): string | null {
   switch (card.rank) {
     case '7':
     case '8':
-      return '看自己一张牌';
+      return '看自己牌';
     case '9':
     case '10':
-      return '看其他玩家一张牌';
+      return '看他人牌';
     case 'J':
     case 'Q':
-      return '暗换：用自己的牌换对方一张牌';
+      return '暗换';
     case 'K':
-      return '明换：看双方一张牌后决定换不换';
+      return '明换';
     default:
       return null;
   }

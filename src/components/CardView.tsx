@@ -21,9 +21,20 @@ interface Props {
   highlight?: boolean;
   /** 附加样式类（如最新弃牌黑框） */
   extraClass?: string;
+  /** 牌面底部功能标注（如"看自己牌"，仅摸牌展示用） */
+  footNote?: string;
 }
 
-export default function CardView({ card, known, faceUp, onClick, selectable, highlight, extraClass }: Props) {
+export default function CardView({
+  card,
+  known,
+  faceUp,
+  onClick,
+  selectable,
+  highlight,
+  extraClass,
+  footNote,
+}: Props) {
   if (!card) {
     return <div className="card card-empty" />;
   }
@@ -45,6 +56,7 @@ export default function CardView({ card, known, faceUp, onClick, selectable, hig
     <div className={classes.join(' ')} onClick={onClick}>
       <div className="card-corner">{cardLabel(card)}</div>
       <div className="card-score">{score > 0 ? `+${score}` : score}</div>
+      {footNote && <div className="card-footnote">{footNote}</div>}
     </div>
   );
 }

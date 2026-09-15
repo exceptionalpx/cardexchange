@@ -614,11 +614,15 @@ describe('状态守恒', () => {
 });
 
 describe('头像配置', () => {
-  it('createGame 按座位写入头像，机器人自动分配默认头像', () => {
+  it('createGame 每个玩家都有头像：真人自定义优先，未设置与机器人自动分配默认', () => {
     const s = createGame({ playerCount: 3, botCount: 2, avatars: ['🐱', undefined, undefined] });
-    expect(s.players[0].avatar).toBe('🐱'); // 真人用自定义
+    expect(s.players[0].avatar).toBe('🐱'); // 真人自定义头像
     expect(s.players[1].avatar).toBeTruthy(); // 机器人自动分配
     expect(s.players[2].avatar).toBeTruthy();
+    // 完全未配置时，所有座位（含真人）都有默认头像
+    const s2 = createGame({ playerCount: 2, botCount: 1 });
+    expect(s2.players[0].avatar).toBeTruthy();
+    expect(s2.players[1].avatar).toBeTruthy();
   });
 });
 

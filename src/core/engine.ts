@@ -92,7 +92,8 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
   for (let i = 0; i < count; i++) {
     const isBot = i >= count - botCount; // 真人玩家优先为前几位
     const name = config.playerNames?.[i] ?? (isBot ? `机器人${i + 1}` : `玩家${i + 1}`);
-    const avatar = config.avatars?.[i] ?? (isBot ? BOT_AVATARS[i % BOT_AVATARS.length] : undefined);
+    // 所有玩家默认分配头像（未选择/未配置时按座位自动取默认），保证对局中每人都有头像
+    const avatar = config.avatars?.[i] ?? BOT_AVATARS[i % BOT_AVATARS.length];
     const handSlots: (Card | null)[] = deck.slice(i * 4, i * 4 + 4);
     players.push({ id: i, name, isBot, avatar, handSlots, knowledge: {} });
   }
