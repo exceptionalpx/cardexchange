@@ -112,6 +112,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     pending: null,
     lastSwap: null,
     lastMove: null,
+    lastViewed: null,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -294,7 +295,13 @@ function discardDrawn(state: GameState): GameState {
   const card = pend.card;
   const discardPile = [...state.discardPile, card];
   return afterDiscard(
-    { ...state, pending: null, discardPile, lastDiscard: card, lastMove: { kind: 'discard', actor: state.currentPlayer } },
+    {
+      ...state,
+      pending: null,
+      discardPile,
+      lastDiscard: card,
+      lastMove: { kind: 'discard', actor: state.currentPlayer, card },
+    },
     card,
   );
 }
@@ -323,7 +330,7 @@ function replace(state: GameState, slot: number): GameState {
       pending: null,
       discardPile,
       lastDiscard: replaced,
-      lastMove: { kind: 'replace', actor: state.currentPlayer, slot },
+      lastMove: { kind: 'replace', actor: state.currentPlayer, slot, replaced },
     },
     replaced,
   );
@@ -404,6 +411,8 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
       ...state,
       players,
       pending: { kind: 'revealDone', card, viewer: me.id },
+      // 被看者需要知道"哪一张被看了"：记录目标槽位（不含牌面），UI 播放拿起放下动画
+      lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot },
       log: [
         ...state.log,
         log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的一张牌`),
@@ -433,6 +442,8 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
         otherSlot: slot,
         otherCard: card,
       },
+      // 被看者需要知道"哪一张被看了"：记录目标槽位（不含牌面）
+      lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot },
       log: [
         ...state.log,
         log(

@@ -99,11 +99,13 @@ export interface GameState {
     otherPlayer: number;
     otherSlot: number;
   } | null;
-  /** 最近一次弃牌/替换动作（动画数据，只含公开位置信息，不含牌面，避免信息泄露） */
+  /** 最近一次弃牌/替换动作（动画数据：弃牌/被替换旧牌会公开进弃牌堆，故可含牌面；替换新牌保密不含） */
   lastMove:
-    | { kind: 'discard'; actor: number } // 摸到的牌弃掉：座位 → 弃牌堆
-    | { kind: 'replace'; actor: number; slot: number } // 替换：新牌（背面）座位 → 槽位；旧牌（正面）槽位 → 弃牌堆
+    | { kind: 'discard'; actor: number; card: Card } // 弃牌：座位 → 弃牌堆（真实牌面）
+    | { kind: 'replace'; actor: number; slot: number; replaced: Card } // 替换：新牌（背面）座位 → 槽位；被替换旧牌（真实牌面）槽位 → 弃牌堆
     | null;
+  /** 最近一次"看牌"动作（9/10 看他人 / K 明换查看对方），目标牌被拿起放下提示动画；不含牌面 */
+  lastViewed: { actor: number; targetPlayer: number; targetSlot: number } | null;
   /** 定牌后剩余待操作轮次（不含定牌玩家） */
   finalRemaining: number;
   winner: number[] | null;

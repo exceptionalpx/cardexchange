@@ -30,6 +30,7 @@ export interface ClientGameView {
   pending: PendingAction | null;
   lastSwap: GameState['lastSwap'];
   lastMove: GameState['lastMove'];
+  lastViewed: GameState['lastViewed'];
   finalRemaining: number;
   winner: number[] | null;
   log: LogEntry[];

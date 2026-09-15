@@ -13,6 +13,7 @@ import UsedPile from './UsedPile';
 import ResultScreen from './ResultScreen';
 import SwapAnim from './SwapAnim';
 import MoveAnim from './MoveAnim';
+import PeekAnim from './PeekAnim';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
 export interface OnlineGameProps {
@@ -320,6 +321,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
         <SwapAnim lastSwap={state.lastSwap} />
         <MoveAnim lastMove={state.lastMove} />
+        <PeekAnim lastViewed={state.lastViewed} />
 
         <ActionPanel
           state={state}

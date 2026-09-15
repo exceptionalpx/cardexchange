@@ -1,10 +1,11 @@
 // 弃牌 / 替换动画：
-// - 弃牌：一张牌（正面白卡）从弃牌者座位飞向弃牌堆（简单飞行）
-// - 替换：猫爪抓住新牌（背面）从座位飞进目标槽位；被替换的旧牌（正面白卡）弹起飞向弃牌堆
-// 一次性播放，播完自动清理；动画牌面不显示真实内容（弃牌堆会展示真实牌面）。
+// - 弃牌：一张牌（真实牌面，弃牌会公开进弃牌堆）从弃牌者座位飞向弃牌堆（简单飞行）
+// - 替换：猫爪抓住新牌（背面，进手牌保密）从座位飞进目标槽位；被替换旧牌（真实牌面，进弃牌堆）弹起飞向弃牌堆
+// 一次性播放，播完自动清理。
 import { useEffect, useRef, useState } from 'react';
-import type { GameState } from '../core/types';
+import type { Card, GameState } from '../core/types';
 import PawSvg from './Paw';
+import CardView from './CardView';
 
 const DURATION = 1400;
 
@@ -23,6 +24,8 @@ interface Plan {
   discard: Rect;
   /** replace：目标槽位 */
   slot?: Rect;
+  /** 飞行卡真实牌面（弃的牌 / 被替换旧牌，均公开进弃牌堆） */
+  card: Card;
 }
 
 export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove'] }) {
@@ -33,7 +36,6 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
 
   useEffect(() => {
     if (!lastMove) return;
-    console.log('[MoveAnim] effect', lastMove);
     const seatEl = document.querySelector(`[data-player="${lastMove.actor}"]`);
     if (!(seatEl instanceof HTMLElement)) return;
     const sr = seatEl.getBoundingClientRect();
@@ -44,6 +46,7 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
       kind: lastMove.kind,
       seat: { x: sr.left + sr.width / 2 - 20, y: sr.top + sr.height / 2 - 28, w: 40, h: 56 },
       discard: { x: dr.left + dr.width / 2 - 20, y: dr.top + dr.height / 2 - 28, w: 40, h: 56 },
+      card: lastMove.kind === 'discard' ? lastMove.card : lastMove.replaced,
     };
     if (lastMove.kind === 'replace') {
       const slotEl = document.querySelector(
@@ -53,7 +56,6 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
       const sl = slotEl.getBoundingClientRect();
       base.slot = { x: sl.left, y: sl.top, w: sl.width, h: sl.height };
     }
-    console.log('[MoveAnim] setPlan', base);
     setPlan(base);
     const t = setTimeout(() => setPlan(null), DURATION);
     return () => clearTimeout(t);
@@ -114,7 +116,9 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
           className="swap-fly"
           style={{ left: plan.seat.x, top: plan.seat.y, width: plan.seat.w, height: plan.seat.h }}
         >
-          <div className="swap-fly-card card fly-card-face" />
+          <div className="swap-fly-card card">
+            <CardView card={plan.card} known />
+          </div>
         </div>
       </div>
     );
@@ -137,7 +141,9 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
         className="swap-fly"
         style={{ left: plan.slot?.x, top: plan.slot?.y, width: plan.slot?.w, height: plan.slot?.h }}
       >
-        <div className="swap-fly-card card fly-card-face" />
+        <div className="swap-fly-card card">
+          <CardView card={plan.card} known />
+        </div>
       </div>
     </div>
   );

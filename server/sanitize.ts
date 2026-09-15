@@ -48,6 +48,7 @@ export function buildClientView(state: GameState, viewerId: number): ClientGameV
     pending: sanitizePending(state.pending, viewerId, state.currentPlayer),
     lastSwap: state.lastSwap,
     lastMove: state.lastMove,
+    lastViewed: state.lastViewed,
     finalRemaining: state.finalRemaining,
     winner: state.winner,
     log: state.log,

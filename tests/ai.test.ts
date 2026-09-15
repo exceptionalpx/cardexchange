@@ -39,6 +39,7 @@ function makeState(hands: Card[][]): GameState {
     pending: null,
     lastSwap: null,
     lastMove: null,
+    lastViewed: null,
     finalRemaining: 0,
     winner: null,
     log: [],

@@ -468,12 +468,7 @@ body {
 }
 
 /* ---------- 飞行白卡（弃牌/替换动画中的"一张牌"副本） ---------- */
-.fly-card-face {
-  background: #fffdf6;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-}
+/* 弃牌/替换动画现在直接展示真实牌面（弃的牌公开进弃牌堆），不再使用空白白卡 */
 
 /* ---------- 对局 ---------- */
 .game {
@@ -713,6 +708,12 @@ body {
   outline: 2px solid rgba(245, 197, 66, 0.55);
 }
 
+/* ---------- 被看牌提示动画（拿起-晃动-放下） ---------- */
+.peek-lift {
+  position: relative;
+  z-index: 60;
+}
+
 /* ---------- 换牌动画（猫爪方案 A · 背面版，一次性） ---------- */
 .swap-anim-layer {
   position: fixed;
@@ -730,6 +731,20 @@ body {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
+}
+
+/* 飞行卡内真实牌面（弃牌/被替换旧牌）：填满并缩小牌内文字 */
+.swap-fly-card .card {
+  width: 100% !important;
+  height: 100% !important;
+  font-size: 11px !important;
+  border-radius: 6px;
+}
+.swap-fly-card .card-corner {
+  font-size: 10px !important;
+}
+.swap-fly-card .card-score {
+  font-size: 9px !important;
 }
 
 /* 猫爪：飞入 → 按压 → 跟随 → 抬起消失 */

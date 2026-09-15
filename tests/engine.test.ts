@@ -44,6 +44,7 @@ function makeGame(
     pending: opts.pending ?? null,
     lastSwap: null,
     lastMove: null,
+    lastViewed: null,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -627,20 +628,44 @@ describe('头像配置', () => {
 });
 
 describe('lastMove 动画数据', () => {
-  it('直接弃牌：写入 discard 动画数据（含操作者，不含牌面）', () => {
+  it('直接弃牌：写入 discard 动画数据（含操作者与被弃牌面，弃牌公开进弃牌堆）', () => {
     const s = makeGame([[card('A'), card('2'), card('3'), card('4')]], { deck: [card('9')] });
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'DISCARD_DRAWN' });
-    expect(g.lastMove).toEqual({ kind: 'discard', actor: 0 });
+    expect(g.lastMove).toEqual({ kind: 'discard', actor: 0, card: card('9') });
   });
 
-  it('替换手牌：写入 replace 动画数据（含槽位与操作者）', () => {
+  it('替换手牌：写入 replace 动画数据（含槽位与被替换旧牌面；新牌保密不含）', () => {
     const s = makeGame([[card('A'), card('2'), card('3'), card('4')]], { deck: [card('9')] });
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'REPLACE', slot: 2 });
-    expect(g.lastMove).toEqual({ kind: 'replace', actor: 0, slot: 2 });
+    expect(g.lastMove).toEqual({ kind: 'replace', actor: 0, slot: 2, replaced: card('3') });
     // 被替换的旧牌进弃牌堆，新牌进槽位
     expect(g.players[0].handSlots[2]).toEqual(card('9'));
     expect(g.discardPile).toContainEqual(card('3'));
+  });
+
+  it('9/10 看他人牌：记录被看槽位（lastViewed 不含牌面）', () => {
+    const s = makeGame(
+      [[card('A'), card('2'), card('3'), card('4')], [card('5'), card('6'), card('7'), card('8')]],
+      { deck: [card('9')], currentPlayer: 0 },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'USE_ABILITY' });
+    g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 2 });
+    expect(g.lastViewed).toEqual({ actor: 0, targetPlayer: 1, targetSlot: 2 });
+  });
+
+  it('K 明换查看对方：记录被看槽位（lastViewed 不含牌面）', () => {
+    const s = makeGame(
+      [[card('A'), card('2'), card('3'), card('4')], [card('5'), card('6'), card('7'), card('8')]],
+      { deck: [card('K')], currentPlayer: 0 },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'USE_ABILITY' });
+    g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 0 });
+    g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 1 });
+    expect(g.lastViewed).toEqual({ actor: 0, targetPlayer: 1, targetSlot: 1 });
+    expect(g.pending?.kind).toBe('confirmReveal');
   });
 });
