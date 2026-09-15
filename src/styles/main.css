@@ -1160,8 +1160,8 @@ body {
 @media (max-width: 560px) {
   /* 手机极窄屏：面板改由"规则/记录"按钮控制，不再强制隐藏 */
   :root {
-    --card-w: 52px;
-    --card-h: 74px;
+    --card-w: 50px;
+    --card-h: 72px;
   }
   .rules-panel {
     width: 62vw;
@@ -1171,5 +1171,122 @@ body {
   .log-panel {
     width: 62vw;
     padding: 10px;
+  }
+
+  /* ---- 移动端布局重排：避免三区块横排挤压重叠 ---- */
+
+  /* 顶部栏：压缩留白，隐藏"牌堆剩余"次要徽章 */
+  .game-header {
+    padding: 8px 10px;
+  }
+  .game-title {
+    font-size: 16px;
+    letter-spacing: 1px;
+  }
+  .game-status {
+    gap: 5px;
+  }
+  .game-status .badge {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+  .badge-deck {
+    display: none;
+  }
+  .header-tools {
+    gap: 4px;
+  }
+  .header-tools .btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* 中间牌桌区：改为纵向排列，各区块横向铺满，超高时在牌桌内滚动 */
+  .game-main {
+    overflow-y: auto;
+  }
+  .table {
+    padding: 8px;
+    gap: 10px;
+  }
+  .center-area {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  .deck-stub .deck-stack {
+    width: 60px;
+    height: 86px;
+  }
+  .deck-stub .deck-card {
+    width: 55px;
+    height: 78px;
+  }
+  .deck-count {
+    font-size: 12px;
+  }
+  .pile-cards {
+    gap: 3px;
+  }
+
+  /* 座位：每行一个，宽度自适应屏幕 */
+  .seats {
+    gap: 10px;
+  }
+  .seat {
+    min-width: 0;
+    width: 100%;
+    max-width: 340px;
+    padding: 8px 6px;
+    gap: 6px;
+  }
+  .seat-slots {
+    gap: 4px;
+  }
+  .card-slot {
+    gap: 3px;
+  }
+  .discard-btn {
+    font-size: 11px;
+    padding: 2px 0;
+  }
+
+  /* 操作面板：压缩留白 */
+  .action-panel {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .action-panel .btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+  .btn-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* 大厅/房间：单列布局 */
+  .lobby-cols {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .lobby-col {
+    width: 100%;
+    padding: 14px 12px;
+  }
+  .room-seats,
+  .room-scoreboard {
+    width: 100%;
+  }
+
+  /* 结算页：卡片铺满屏幕可滚动 */
+  .result-card {
+    width: 94vw;
+    max-width: 420px;
+    padding: 16px 12px;
+    overflow-y: auto;
+  }
+  .result-player .seat-slots {
+    gap: 3px;
   }
 }
