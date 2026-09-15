@@ -875,6 +875,16 @@ body {
   display: block;
 }
 
+/* 爪型 PNG 素材（方案C：按换牌者头像选爪） */
+.swap-paw-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 @keyframes swap-paw-life {
   0% {
     transform: scale(1.9) translateY(-18px);

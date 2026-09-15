@@ -5,7 +5,7 @@
 // 内容级防重：联机广播会重建对象引用，只有内容真正变化才播一次，避免动画重复。
 import { useEffect, useRef, useState } from 'react';
 import type { Card, GameState } from '../core/types';
-import PawSvg from './Paw';
+import { pawForAvatar } from '../core/pawAssets';
 import CardView from './CardView';
 
 interface Rect {
@@ -35,9 +35,11 @@ interface Plan {
 interface Props {
   lastMove: GameState['lastMove'];
   lastPenalty: GameState['lastPenalty'];
+  /** 座位头像来源（替换动画按操作者头像选爪型），缺省用猫爪兜底 */
+  players?: GameState['players'];
 }
 
-export default function MoveAnim({ lastMove, lastPenalty }: Props) {
+export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const pawRef = useRef<HTMLDivElement>(null);
   const oldRef = useRef<HTMLDivElement>(null);
@@ -203,6 +205,9 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
 
   if (!plan) return null;
 
+  // replace 分支的操作者（penalty/discard 分支不使用；penalty 时 lastMove 可为 null）
+  const replaceActor = lastMove ? lastMove.actor : -1;
+
   if (plan.kind === 'discard') {
     return (
       <div className="swap-anim-layer" aria-hidden>
@@ -241,7 +246,12 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
         style={{ left: plan.seat.x, top: plan.seat.y, width: plan.seat.w, height: plan.seat.h }}
       >
         <div className="swap-paw" aria-hidden>
-          <PawSvg />
+          <img
+            className="swap-paw-img"
+            src={pawForAvatar(players?.[replaceActor]?.avatar)}
+            alt=""
+            draggable={false}
+          />
         </div>
         <div className="swap-fly-card card card-back">?</div>
       </div>

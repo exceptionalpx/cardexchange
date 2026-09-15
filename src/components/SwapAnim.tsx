@@ -4,7 +4,7 @@
 // 信息边界：飞行副本一律背面，不展示牌面内容。
 import { useEffect, useRef, useState } from 'react';
 import type { GameState } from '../core/types';
-import PawSvg from './Paw';
+import { pawForAvatar } from '../core/pawAssets';
 
 interface Rect {
   x: number;
@@ -23,7 +23,14 @@ interface AnimPlan {
   otherKey: string;
 }
 
-export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap'] }) {
+export default function SwapAnim({
+  lastSwap,
+  players,
+}: {
+  lastSwap: GameState['lastSwap'];
+  /** 换牌者头像来源（座位头像在各端视图已同步），缺省时用猫爪兜底 */
+  players?: GameState['players'];
+}) {
   const [plan, setPlan] = useState<AnimPlan | null>(null);
   const pawRef = useRef<HTMLDivElement>(null);
   const otherRef = useRef<HTMLDivElement>(null);
@@ -127,7 +134,11 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
     };
   }, [plan]);
 
-  if (!plan) return null;
+  if (!plan || !lastSwap) return null;
+
+  // 换牌者头像 → 爪型素材（机器人=机械手，自定义头像/未知=猫爪兜底）
+  const actorAvatar = players?.[lastSwap.actor]?.avatar;
+  const pawUrl = pawForAvatar(actorAvatar);
 
   return (
     <div className="swap-anim-layer" aria-hidden>
@@ -137,7 +148,7 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
         style={{ left: plan.selfFrom.x, top: plan.selfFrom.y, width: plan.selfFrom.w, height: plan.selfFrom.h }}
       >
         <div className="swap-paw" aria-hidden>
-          <PawSvg />
+          <img className="swap-paw-img" src={pawUrl} alt="" draggable={false} />
         </div>
         <div className="swap-fly-card card card-back">?</div>
       </div>
