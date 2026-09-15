@@ -10,6 +10,7 @@ import ActionPanel from './ActionPanel';
 import LogPanel from './LogPanel';
 import DiscardPile from './DiscardPile';
 import ResultScreen from './ResultScreen';
+import SwapAnim from './SwapAnim';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
 export interface OnlineGameProps {
@@ -75,8 +76,6 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // 规则/游戏进程面板：点击按钮展开，默认收起
   const [showRules, setShowRules] = useState(false);
   const [showLog, setShowLog] = useState(false);
-  // 最近一次换牌换入的槽位标记（展示 3 秒后清除，不持续）
-  const [swapMark, setSwapMark] = useState<{ playerId: number; slot: number }[] | null>(null);
 
   // 联机：状态来自服务器视图；本地：内部 reducer
   const state = isOnline && online ? (online.view as unknown as GameState) : localState;
@@ -96,21 +95,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }
     setReplaceMode(false);
     setKDeciding(false);
-    setSwapMark(null);
     if (config) setLocalState(createGame({ playerCount: config.playerCount, botCount: config.botCount }));
   }, [online, config]);
-
-  // ---- 换牌标记：监听 lastSwap 变化，高亮双方换入的槽位 3 秒后自动清除 ----
-  useEffect(() => {
-    if (!state.lastSwap) return;
-    const { selfPlayer, selfSlot, otherPlayer, otherSlot } = state.lastSwap;
-    setSwapMark([
-      { playerId: selfPlayer, slot: selfSlot },
-      { playerId: otherPlayer, slot: otherSlot },
-    ]);
-    const t = setTimeout(() => setSwapMark(null), 3000);
-    return () => clearTimeout(t);
-  }, [state.lastSwap]);
 
   // ---- 机器人自动行动调度（仅本地模式；联机由服务器调度） ----
   useEffect(() => {
@@ -312,12 +298,13 @@ export default function GameScreen({ config, online, onExit }: Props) {
                   onSlotClick={(slot) => handleSlotClick(vp.id, slot)}
                   showDiscard={showDiscard}
                   onDiscard={(slot) => dispatch({ type: 'TRY_FOLLOW', playerId: vp.id, slot })}
-                  swapSlots={swapMark?.filter((m) => m.playerId === vp.id).map((m) => m.slot)}
                 />
               );
             })}
           </div>
         </div>
+
+        <SwapAnim lastSwap={state.lastSwap} />
 
         <ActionPanel
           state={state}
