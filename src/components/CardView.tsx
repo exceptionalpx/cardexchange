@@ -12,6 +12,25 @@ export function isRed(card: Card): boolean {
   return card.suit === 'hearts' || card.suit === 'diamonds' || card.rank === 'JOKER_BIG';
 }
 
+/** 功能牌短标注（印在牌面上；无功能的普通牌返回 null） */
+export function abilityDesc(card: Card): string | null {
+  switch (card.rank) {
+    case '7':
+    case '8':
+      return '看自己牌';
+    case '9':
+    case '10':
+      return '看他人牌';
+    case 'J':
+    case 'Q':
+      return '暗换';
+    case 'K':
+      return '明换';
+    default:
+      return null;
+  }
+}
+
 interface Props {
   card: Card | null;
   known: boolean;

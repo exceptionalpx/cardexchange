@@ -1,7 +1,7 @@
 import type { Action, Card, GameState } from '../core/types';
 import { canApply } from '../core/engine';
 import { scoreOf } from '../core/score';
-import CardView, { cardLabel } from './CardView';
+import CardView, { abilityDesc, cardLabel } from './CardView';
 
 interface Props {
   state: GameState;
@@ -196,23 +196,4 @@ export default function ActionPanel({
 function scoreText(card: Card): string {
   const score = scoreOf(card);
   return score > 0 ? `+${score}分` : `${score}分`;
-}
-
-/** 功能牌短标注（直接印在牌面上；无功能的普通牌返回空） */
-function abilityDesc(card: Card): string | null {
-  switch (card.rank) {
-    case '7':
-    case '8':
-      return '看自己牌';
-    case '9':
-    case '10':
-      return '看他人牌';
-    case 'J':
-    case 'Q':
-      return '暗换';
-    case 'K':
-      return '明换';
-    default:
-      return null;
-  }
 }

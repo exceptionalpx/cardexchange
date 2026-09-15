@@ -70,7 +70,11 @@ export default function GameScreen({ config, online, onExit }: Props) {
   const isOnline = !!online;
   const [localState, setLocalState] = useState<GameState>(() =>
     config
-      ? createGame({ playerCount: config.playerCount, botCount: config.botCount })
+      ? createGame({
+          playerCount: config.playerCount,
+          botCount: config.botCount,
+          avatars: config.avatars,
+        })
       : (null as unknown as GameState),
   );
   const [replaceMode, setReplaceMode] = useState(false);
@@ -97,7 +101,14 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }
     setReplaceMode(false);
     setKDeciding(false);
-    if (config) setLocalState(createGame({ playerCount: config.playerCount, botCount: config.botCount }));
+    if (config)
+      setLocalState(
+        createGame({
+          playerCount: config.playerCount,
+          botCount: config.botCount,
+          avatars: config.avatars,
+        }),
+      );
   }, [online, config]);
 
   // ---- 机器人自动行动调度（仅本地模式；联机由服务器调度） ----

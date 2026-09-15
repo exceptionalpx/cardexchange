@@ -1,42 +1,41 @@
-// 动漫猫爪（白色爪身 + 粉色肉垫）
+// 动漫猫爪（参考图：白色爪身 + 粉色肉垫，4 个小趾垫 + 大掌垫 + 腕垫，朝上摊开视角）
 export default function PawSvg() {
   return (
     <svg viewBox="0 0 100 100" className="swap-paw-svg">
       {/* 白色爪身 */}
       <path
-        d="M50 6 C36 6 26 18 25 33 C24 41 23 48 25 55 L25 74 C25 85 36 93 50 93 C64 93 75 85 75 74 L75 55 C77 48 76 41 75 33 C74 18 64 6 50 6 Z"
+        d="M50 5 C36 5 25 15 23 29 C21 41 21 54 23 66 L24 79 C26 89 37 94 50 94 C63 94 74 89 76 79 L77 66 C79 54 79 41 77 29 C75 15 64 5 50 5 Z"
         fill="#ffffff"
         stroke="#d46a85"
         strokeWidth="3.5"
       />
-      {/* 粉色主肉垫 */}
-      <ellipse cx="50" cy="67" rx="19" ry="14.5" fill="#ffb3c1" stroke="#d46a85" strokeWidth="2.5" />
-      {/* 粉色爪趾 */}
+      {/* 4 个小趾垫 */}
       <ellipse
-        cx="29"
-        cy="42"
-        rx="8.5"
-        ry="11"
+        cx="23"
+        cy="32"
+        rx="7.5"
+        ry="9.5"
         fill="#ffb3c1"
         stroke="#d46a85"
-        strokeWidth="2.5"
-        transform="rotate(-14 29 42)"
+        strokeWidth="2.2"
+        transform="rotate(-10 23 32)"
       />
-      <ellipse cx="50" cy="36" rx="8.5" ry="12" fill="#ffb3c1" stroke="#d46a85" strokeWidth="2.5" />
+      <ellipse cx="41" cy="26" rx="7.5" ry="10" fill="#ffb3c1" stroke="#d46a85" strokeWidth="2.2" />
+      <ellipse cx="59" cy="26" rx="7.5" ry="10" fill="#ffb3c1" stroke="#d46a85" strokeWidth="2.2" />
       <ellipse
-        cx="71"
-        cy="42"
-        rx="8.5"
-        ry="11"
+        cx="77"
+        cy="32"
+        rx="7.5"
+        ry="9.5"
         fill="#ffb3c1"
         stroke="#d46a85"
-        strokeWidth="2.5"
-        transform="rotate(14 71 42)"
+        strokeWidth="2.2"
+        transform="rotate(10 77 32)"
       />
-      {/* 爪尖 */}
-      <path d="M22 16 L31 27 L13 25 Z" fill="#d46a85" />
-      <path d="M50 4 L52.5 18 L47.5 18 Z" fill="#d46a85" />
-      <path d="M78 16 L87 25 L69 27 Z" fill="#d46a85" />
+      {/* 大掌垫（圆润掌形） */}
+      <ellipse cx="50" cy="61" rx="19" ry="15.5" fill="#ffb3c1" stroke="#d46a85" strokeWidth="2.5" />
+      {/* 腕垫 */}
+      <ellipse cx="50" cy="84" rx="10" ry="6" fill="#ffb3c1" stroke="#d46a85" strokeWidth="2.2" />
     </svg>
   );
 }
