@@ -72,6 +72,9 @@ export default function GameScreen({ config, online, onExit }: Props) {
   );
   const [replaceMode, setReplaceMode] = useState(false);
   const [kDeciding, setKDeciding] = useState(false);
+  // 规则/游戏进程面板：点击按钮展开，默认收起
+  const [showRules, setShowRules] = useState(false);
+  const [showLog, setShowLog] = useState(false);
   // 最近一次换牌换入的槽位标记（展示 3 秒后清除，不持续）
   const [swapMark, setSwapMark] = useState<{ playerId: number; slot: number }[] | null>(null);
 
@@ -219,14 +222,17 @@ export default function GameScreen({ config, online, onExit }: Props) {
   }
 
   // 记忆考验：平时一律背面，只有发牌看牌、翻看限时、K 明换展示中的牌正面
-  // 信息隐藏：发牌亮牌仅限"真人"当前玩家（机器人看牌时自动确认，绝不亮牌）
+  // 信息隐藏：发牌亮牌仅限"本人"（本地热座=当前真人玩家；联机=自己座位），机器人看牌时自动确认，绝不亮牌
   const dealReveal = state.phase === 'deal';
   const viewPlayers: ViewPlayer[] = view.players.map((vp, i) => ({
     ...vp,
     slots: vp.slots.map((s) => {
       if (!s.card) return s;
       const faceUp =
-        (dealReveal && i === state.currentPlayer && !state.players[i].isBot) ||
+        (dealReveal &&
+          i === state.currentPlayer &&
+          !state.players[i].isBot &&
+          (online ? i === online.myId : true)) ||
         faceUpIds.has(s.card.id);
       return { card: s.card, known: faceUp };
     }),
@@ -243,22 +249,38 @@ export default function GameScreen({ config, online, onExit }: Props) {
           )}
           <span className="badge">牌堆剩余 {deckCount} 张</span>
         </div>
+        <div className="header-tools">
+          <button
+            className={`btn btn-small ${showRules ? 'btn-active' : ''}`}
+            onClick={() => setShowRules((v) => !v)}
+          >
+            规则
+          </button>
+          <button
+            className={`btn btn-small ${showLog ? 'btn-active' : ''}`}
+            onClick={() => setShowLog((v) => !v)}
+          >
+            记录
+          </button>
+        </div>
         <button className="btn btn-small" onClick={onExit}>
           退出
         </button>
       </div>
 
-      <div className="rules-panel">
-        <div className="pile-label">规则</div>
-        <ul>
-          <li>定牌后手牌总分<b>最小</b>者胜（并列同胜）</li>
-          <li>大小王 0 分 · ♥K -1 分 · A~K = 1~13</li>
-          <li>7/8 看自己 · 9/10 看别人 · J/Q 暗换 · K 明换</li>
-          <li>弃牌不补牌；同分可跟弃，抢先成功，失败罚补 1 张</li>
-          <li>自己回合可定牌，其余人各操作一轮后终局</li>
-          <li>牌堆耗尽：总分最低者胜</li>
-        </ul>
-      </div>
+      {showRules && (
+        <div className="rules-panel">
+          <div className="pile-label">规则</div>
+          <ul>
+            <li>定牌后手牌总分<b>最小</b>者胜（并列同胜）</li>
+            <li>大小王 0 分 · ♥K -1 分 · A~K = 1~13</li>
+            <li>7/8 看自己 · 9/10 看别人 · J/Q 暗换 · K 明换</li>
+            <li>弃牌不补牌；同分可跟弃，抢先成功，失败罚补 1 张</li>
+            <li>自己回合可定牌，其余人各操作一轮后终局</li>
+            <li>牌堆耗尽：总分最低者胜</li>
+          </ul>
+        </div>
+      )}
 
       <div className="game-main">
         <div className="table">
@@ -307,7 +329,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
           myId={isOnline && online ? online.myId : undefined}
         />
 
-        <LogPanel state={state} />
+        {showLog && <LogPanel state={state} />}
       </div>
     </div>
   );

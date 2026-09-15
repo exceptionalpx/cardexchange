@@ -536,12 +536,21 @@ body {
 /* ---------- 操作面板 ---------- */
 .action-panel {
   padding: 14px 18px;
-  background: rgba(0, 0, 0, 0.3);
+  /* 置顶：任何情况下不被其他玩家的牌遮挡（摸牌提示/按钮优先可见） */
+  position: relative;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.85);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+/* ---------- 顶栏工具按钮（规则/记录） ---------- */
+.header-tools {
+  display: flex;
+  gap: 6px;
 }
 
 /* ---------- 规则面板（常驻左上角） ---------- */
@@ -683,9 +692,18 @@ body {
 }
 
 @media (max-width: 560px) {
-  /* 手机极窄屏：固定面板会挤占牌桌，隐藏（规则可在主菜单查看） */
-  .log-panel,
+  /* 手机极窄屏：面板改由"规则/记录"按钮控制，不再强制隐藏 */
+  :root {
+    --card-w: 52px;
+    --card-h: 74px;
+  }
   .rules-panel {
-    display: none;
+    width: 62vw;
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+  .log-panel {
+    width: 62vw;
+    padding: 10px;
   }
 }
