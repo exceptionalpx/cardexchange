@@ -7,10 +7,22 @@ interface Props {
   /** 联机模式：只有房主能发起下一局 */
   canRestart?: boolean;
   onExit: () => void;
+  /** 多局累计总分（key = 玩家 id，仅下发已参与玩家；缺省不显示累计榜） */
+  totalScores?: Record<number, number> | null;
+  /** 已玩局数（含本局） */
+  gamesPlayed?: number;
 }
 
-export default function ResultScreen({ state, onRestart, canRestart = true, onExit }: Props) {
+export default function ResultScreen({
+  state,
+  onRestart,
+  canRestart = true,
+  onExit,
+  totalScores,
+  gamesPlayed,
+}: Props) {
   const winners = state.winner ?? [];
+  const hasTotal = !!totalScores && Object.keys(totalScores).length > 0;
   return (
     <div className="result-screen">
       <div className="result-card">
@@ -40,6 +52,27 @@ export default function ResultScreen({ state, onRestart, canRestart = true, onEx
             );
           })}
         </div>
+
+        {hasTotal && (
+          <div className="result-total">
+            <div className="pile-label">
+              累计总分榜（{gamesPlayed ?? 1} 局 · 总分最小者最终胜）
+            </div>
+            <div className="result-total-row">
+              {[...state.players]
+                .sort((a, b) => (totalScores[a.id] ?? 0) - (totalScores[b.id] ?? 0))
+                .map((p, i) => (
+                  <div key={p.id} className={`result-total-item ${i === 0 ? 'result-total-lead' : ''}`}>
+                    <span className="result-total-rank">{i + 1}</span>
+                    {p.avatar && <span className="avatar avatar-sm">{p.avatar}</span>}
+                    <span className="result-total-name">{p.name}</span>
+                    <span className="result-total-score">{totalScores[p.id] ?? 0} 分</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
         <div className="btn-row">
           {canRestart ? (
             <button className="btn btn-primary btn-big" onClick={onRestart}>

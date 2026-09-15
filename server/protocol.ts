@@ -10,6 +10,8 @@ export interface RoomSeatInfo {
   /** 头像（emoji 或 dataURL，本机保存随座位同步） */
   avatar?: string;
   taken: boolean;
+  /** 真人准备状态（机器人恒 true） */
+  ready: boolean;
 }
 
 /** 服务器下发给单个玩家的对局视图（per-viewer 脱敏） */
@@ -34,16 +36,27 @@ export interface ClientGameView {
   lastMove: GameState['lastMove'];
   lastViewed: GameState['lastViewed'];
   lastPenalty: GameState['lastPenalty'];
+  /** 最新一次弃牌（黑框 + "可跟弃"提示用；公开信息） */
+  lastDiscard: GameState['lastDiscard'];
+  /** 跟弃窗口脱敏信息（不泄露他人是否可跟） */
+  follow: { discarder: number; targetScore: number; canFollow: boolean } | null;
   finalRemaining: number;
   winner: number[] | null;
   log: LogEntry[];
   /** 该玩家视角的槽位视图（含自身 knowledge 的牌面） */
   view: PlayerView;
+  /** 多局累计总分（按座位，公开结算信息） */
+  totalScores: Record<number, number>;
+  /** 已玩局数 */
+  gamesPlayed: number;
 }
 
 export type ClientMessage =
-  | { type: 'createRoom'; name: string; totalPlayers: number; botCount: number; avatar?: string }
+  | { type: 'createRoom'; name: string; avatar?: string }
   | { type: 'joinRoom'; code: string; name: string; avatar?: string }
+  | { type: 'addBot' }
+  | { type: 'removeBot' }
+  | { type: 'ready'; ready: boolean }
   | { type: 'startGame' }
   | { type: 'action'; action: Action }
   | { type: 'restart' }
@@ -56,11 +69,19 @@ export type ServerMessage =
       playerId: number;
       hostId: number;
       seats: RoomSeatInfo[];
-      totalPlayers: number;
-      botCount: number;
       canStart: boolean;
+      totalScores: Record<number, number>;
+      gamesPlayed: number;
     }
-  | { type: 'roomUpdate'; code: string; hostId: number; seats: RoomSeatInfo[]; canStart: boolean }
+  | {
+      type: 'roomUpdate';
+      code: string;
+      hostId: number;
+      seats: RoomSeatInfo[];
+      canStart: boolean;
+      totalScores: Record<number, number>;
+      gamesPlayed: number;
+    }
   | { type: 'gameStart'; myId: number }
   | { type: 'view'; view: ClientGameView }
   | { type: 'roomClosed'; message: string }

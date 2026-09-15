@@ -20,6 +20,8 @@ interface RoomView {
   canStart: boolean;
   hostId: number;
   myId: number;
+  totalScores: Record<number, number>;
+  gamesPlayed: number;
 }
 
 interface Props {
@@ -33,8 +35,6 @@ interface Props {
 export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   const [name, setName] = useState(() => localStorage.getItem('cardexchange-name') ?? '');
   const [avatar, setAvatar] = useState(loadAvatar());
-  const [totalPlayers, setTotalPlayers] = useState(4);
-  const [botCount, setBotCount] = useState(2);
   const [joinCode, setJoinCode] = useState('');
   const [room, setRoom] = useState<RoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +76,8 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
             canStart: msg.canStart,
             hostId: msg.hostId,
             myId: msg.playerId,
+            totalScores: msg.totalScores ?? {},
+            gamesPlayed: msg.gamesPlayed ?? 0,
           });
           setError(null);
           localStorage.setItem('cardexchange-name', nameRef.current);
@@ -93,13 +95,15 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
           break;
         }
         case 'roomUpdate':
-          setRoom({
+          setRoom((prev) => ({
             code: msg.code,
             seats: msg.seats,
             canStart: msg.canStart,
             hostId: msg.hostId,
-            myId: myIdRef.current,
-          });
+            myId: prev?.myId ?? myIdRef.current,
+            totalScores: msg.totalScores ?? {},
+            gamesPlayed: msg.gamesPlayed ?? 0,
+          }));
           setError(null);
           break;
         case 'gameStart':
@@ -119,8 +123,6 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [net]);
 
-  const maxBots = totalPlayers - 1;
-
   function leave() {
     localStorage.removeItem(ONLINE_KEY);
     net.setResume(null);
@@ -128,37 +130,89 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   }
 
   if (room) {
+    const isHost = room.myId === room.hostId;
+    const me = room.seats.find((s) => s.id === room.myId);
+    const humanCount = room.seats.filter((s) => !s.isBot && s.taken).length;
+    const botCount = room.seats.filter((s) => s.isBot).length;
+    const total = humanCount + botCount;
+    const waiting = room.seats.some((s) => !s.taken);
     return (
       <div className="menu lobby">
         <h1 className="menu-title">房间 {room.code}</h1>
-        <p className="menu-sub">把房间码告诉朋友，随时随地即可加入</p>
+        <p className="menu-sub">把房间码告诉朋友即可加入 · 机器人可由房主添加</p>
 
         <div className="room-seats">
           {room.seats.map((s) => (
             <div key={s.id} className={`room-seat ${s.id === room.myId ? 'room-seat-me' : ''}`}>
               <span className="room-seat-name">
                 {s.avatar && <span className="avatar avatar-sm">{s.avatar}</span>}
-                座位 {s.id + 1}：{s.name}
+                座位 {s.id + 1}：{s.taken ? s.name : '空位'}
               </span>
               {s.id === room.hostId && <span className="badge">房主</span>}
               {s.id === room.myId && <span className="badge">你</span>}
               {!s.taken && <span className="badge badge-wait">等待加入</span>}
               {s.isBot && <span className="badge">机器人</span>}
+              {s.taken && !s.isBot && (
+                <span className={`badge ${s.ready ? 'badge-ready' : 'badge-wait'}`}>
+                  {s.ready ? '已准备' : '未准备'}
+                </span>
+              )}
             </div>
           ))}
         </div>
 
+        {room.gamesPlayed > 0 && (
+          <div className="room-scoreboard">
+            已玩 {room.gamesPlayed} 局 · 累计总分（最小者领先）：
+            {room.seats
+              .filter((s) => s.taken)
+              .map((s) => (
+                <span key={s.id} className="room-score-item">
+                  {s.name} {room.totalScores[s.id] ?? 0}
+                </span>
+              ))}
+          </div>
+        )}
+
         <div className="menu-actions">
-          {room.myId === room.hostId ? (
-            <button
-              className="btn btn-big btn-primary"
-              disabled={!room.canStart}
-              onClick={() => net.send({ type: 'startGame' })}
-            >
-              {room.canStart ? '开始游戏' : '等待玩家加入…'}
-            </button>
+          {isHost ? (
+            <>
+              <button
+                className="btn"
+                disabled={!waiting}
+                onClick={() => net.send({ type: 'addBot' })}
+              >
+                添加机器人
+              </button>
+              <button
+                className="btn"
+                disabled={botCount === 0}
+                onClick={() => net.send({ type: 'removeBot' })}
+              >
+                移除机器人
+              </button>
+              <button
+                className="btn btn-big btn-primary"
+                disabled={!room.canStart}
+                onClick={() => net.send({ type: 'startGame' })}
+              >
+                {room.canStart
+                  ? `开始游戏（${total} 人）`
+                  : total < 2
+                    ? '至少 2 人才能开始'
+                    : '等待所有人准备…'}
+              </button>
+            </>
           ) : (
             <p className="hint">等待房主开始游戏…</p>
+          )}
+          {me && !me.isBot && (
+            <button
+              className="btn btn-big"
+              onClick={() => net.send({ type: 'ready', ready: !me.ready })}
+            >
+              {me.ready ? '取消准备' : '准备'}
+            </button>
           )}
           <button className="btn btn-big" onClick={leave}>
             离开房间
@@ -172,7 +226,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   return (
     <div className="menu lobby">
       <h1 className="menu-title">♠ 联机对战 ♥</h1>
-      <p className="menu-sub">公网联机 · 把房间码发给朋友，即可随时同局对战</p>
+      <p className="menu-sub">公网联机 · 创建房间后可添加机器人或等待朋友加入</p>
 
       <div className="menu-section">
         <label>昵称</label>
@@ -191,49 +245,20 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
       <div className="lobby-cols">
         <div className="lobby-col">
           <div className="menu-section">
-            <label>创建房间 · 人数</label>
-            <div className="btn-group">
-              {[2, 3, 4].map((n) => (
-                <button
-                  key={n}
-                  className={n === totalPlayers ? 'btn btn-primary' : 'btn'}
-                  onClick={() => {
-                    setTotalPlayers(n);
-                    setBotCount((b) => Math.min(b, n - 1));
-                  }}
-                >
-                  {n} 人
-                </button>
-              ))}
-            </div>
+            <button
+              className="btn btn-big btn-primary"
+              onClick={() => {
+                if (!name.trim()) {
+                  setError('请先输入昵称');
+                  return;
+                }
+                net.send({ type: 'createRoom', name, avatar });
+              }}
+            >
+              创建房间
+            </button>
+            <p className="hint">创建后可在房间内添加机器人（1~3 个）或等待玩家加入，最多 4 人</p>
           </div>
-          <div className="menu-section">
-            <label>机器人数量</label>
-            <div className="btn-group">
-              {Array.from({ length: maxBots + 1 }, (_, i) => i).map((n) => (
-                <button
-                  key={n}
-                  className={n === botCount ? 'btn btn-primary' : 'btn'}
-                  onClick={() => setBotCount(n)}
-                >
-                  {n} 个
-                </button>
-              ))}
-            </div>
-            <p className="hint">还需 {Math.max(0, totalPlayers - botCount - 1)} 位真人加入</p>
-          </div>
-          <button
-            className="btn btn-big btn-primary"
-            onClick={() => {
-              if (!name.trim()) {
-                setError('请先输入昵称');
-                return;
-              }
-              net.send({ type: 'createRoom', name, totalPlayers, botCount, avatar });
-            }}
-          >
-            创建房间
-          </button>
         </div>
 
         <div className="lobby-col">
@@ -293,7 +318,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
                     >
                       <span className="room-item-host">{r.hostName}</span>
                       <span>
-                        人数 {r.humanFilled}/{r.humanTotal}
+                        真人 {r.humanFilled}/{r.humanTotal}
                       </span>
                       <span className="badge">{r.inGame ? '对局中' : full ? '已满' : '可加入'}</span>
                       <span className="room-item-code">{r.code}</span>

@@ -92,8 +92,10 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
   const deck = shuffle(buildDeck(), rng);
 
   const players: PlayerState[] = [];
+  const bots = config.bots; // 联机房间：机器人可任意座位
   for (let i = 0; i < count; i++) {
-    const isBot = i >= count - botCount; // 真人玩家优先为前几位
+    // 真人玩家优先为前几位；若提供 bots 数组则按数组判定（支持任意位置混坐）
+    const isBot = bots ? !!bots[i] : i >= count - botCount;
     const name = config.playerNames?.[i] ?? (isBot ? `机器人${i + 1}` : `玩家${i + 1}`);
     // 头像：机器人统一用机器人头像；真人优先用自己选的，空串/未配置从真人默认池按座位分配
     const chosen = (config.avatars?.[i] || '').trim();
@@ -119,6 +121,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     lastMove: null,
     lastViewed: null,
     lastPenalty: null,
+    animSeq: 0,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -323,7 +326,8 @@ function discardDrawn(state: GameState): GameState {
       pending: null,
       discardPile,
       lastDiscard: card,
-      lastMove: { kind: 'discard', actor: state.currentPlayer, card },
+      animSeq: state.animSeq + 1,
+      lastMove: { kind: 'discard', actor: state.currentPlayer, card, seq: state.animSeq + 1 },
     },
     card,
   );
@@ -353,7 +357,8 @@ function replace(state: GameState, slot: number): GameState {
       pending: null,
       discardPile,
       lastDiscard: replaced,
-      lastMove: { kind: 'replace', actor: state.currentPlayer, slot, replaced },
+      animSeq: state.animSeq + 1,
+      lastMove: { kind: 'replace', actor: state.currentPlayer, slot, replaced, seq: state.animSeq + 1 },
     },
     replaced,
   );
@@ -418,7 +423,8 @@ function pickSelfSlot(state: GameState, slot: number): GameState {
     players,
     pending: { kind: 'revealDone', card, viewer: me.id },
     // 看自己牌也记录目标槽位：UI 播放拿起-晃动-放下（牌面仅对自己展示）
-    lastViewed: { actor: me.id, targetPlayer: me.id, targetSlot: slot },
+    animSeq: state.animSeq + 1,
+    lastViewed: { actor: me.id, targetPlayer: me.id, targetSlot: slot, seq: state.animSeq + 1 },
     log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的一张牌`)],
   };
 }
@@ -451,7 +457,8 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
     players,
     pending: { kind: 'revealDone', card, viewer: me.id },
     // 被看者需要知道"哪一张被看了"：记录目标槽位（不含牌面），UI 播放拿起放下动画
-    lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot },
+    animSeq: state.animSeq + 1,
+    lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot, seq: state.animSeq + 1 },
     log: [
       ...state.log,
       log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的一张牌`),
@@ -490,7 +497,8 @@ function maybeExecuteSwap(state: GameState): GameState {
         otherCard,
       },
       // 被看者需要知道"哪一张被看了"：记录目标槽位（不含牌面）
-      lastViewed: { actor: me.id, targetPlayer: pend.otherPlayer, targetSlot: pend.otherSlot },
+      animSeq: state.animSeq + 1,
+      lastViewed: { actor: me.id, targetPlayer: pend.otherPlayer, targetSlot: pend.otherSlot, seq: state.animSeq + 1 },
       log: [
         ...state.log,
         log(
@@ -541,12 +549,14 @@ function swapCards(
     {
       ...state,
       players,
+      animSeq: state.animSeq + 1,
       lastSwap: {
         actor: me.id,
         selfPlayer: me.id,
         selfSlot,
         otherPlayer: otherPlayerId,
         otherSlot,
+        seq: state.animSeq + 1,
       },
     },
     `${playerName(state, me.id)} 与 ${playerName(state, otherPlayerId)} ${label}`,
@@ -648,7 +658,10 @@ function tryFollow(state: GameState, playerId: number, slot: number): GameState 
     deck: res.deck,
     follow: follow && decisions ? { ...follow, decisions } : state.follow,
     // 罚牌动画数据：只记罚给谁、落在哪个槽（牌面保密）
-    lastPenalty: res.got ? { actor: playerId, slot: res.slot } : state.lastPenalty,
+    animSeq: res.got ? state.animSeq + 1 : state.animSeq,
+    lastPenalty: res.got
+      ? { actor: playerId, slot: res.slot, seq: state.animSeq + 1 }
+      : state.lastPenalty,
     log: [
       ...state.log,
       log(

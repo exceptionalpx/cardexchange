@@ -44,15 +44,14 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
   const pawRef = useRef<HTMLDivElement>(null);
   const oldRef = useRef<HTMLDivElement>(null);
   const flyRef = useRef<HTMLDivElement>(null);
-  const moveSigRef = useRef('');
-  const penaltySigRef = useRef('');
+  const moveSeqRef = useRef(0);
+  const penaltySeqRef = useRef(0);
 
-  // 弃牌 / 替换：内容签名防重（联机广播引用常变，内容相同不重播）
+  // 弃牌 / 替换：按 seq 防重（联机广播引用常变；内容相同但事件不同——同槽位二次替换——也要播放）
   useEffect(() => {
     if (!lastMove) return;
-    const sig = JSON.stringify(lastMove);
-    if (sig === moveSigRef.current) return;
-    moveSigRef.current = sig;
+    if (lastMove.seq <= moveSeqRef.current) return;
+    moveSeqRef.current = lastMove.seq;
 
     const seatEl = document.querySelector(`[data-player="${lastMove.actor}"]`);
     if (!(seatEl instanceof HTMLElement)) return;
@@ -87,9 +86,8 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
   // 罚牌：背面牌从牌堆飞入槽位，落位后槽位高亮
   useEffect(() => {
     if (!lastPenalty) return;
-    const sig = JSON.stringify(lastPenalty);
-    if (sig === penaltySigRef.current) return;
-    penaltySigRef.current = sig;
+    if (lastPenalty.seq <= penaltySeqRef.current) return;
+    penaltySeqRef.current = lastPenalty.seq;
 
     const deckEl = document.querySelector('.deck-stub');
     if (!(deckEl instanceof HTMLElement)) return;

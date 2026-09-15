@@ -238,6 +238,78 @@ body {
   animation: wait-pulse 1.4s ease-in-out infinite;
 }
 
+.badge-ready {
+  background: #2e9e5b;
+  color: #fff;
+}
+
+/* 房间累计积分板（多局连打） */
+.room-scoreboard {
+  width: 340px;
+  max-width: 92vw;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 13px;
+  line-height: 1.7;
+  color: #ffe98a;
+}
+
+.room-score-item {
+  margin-right: 12px;
+  white-space: nowrap;
+}
+
+/* 结算页：累计总分榜 */
+.result-total {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.25);
+}
+
+.result-total-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.result-total-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 14px;
+}
+
+.result-total-lead {
+  background: rgba(255, 214, 0, 0.16);
+  border: 1px solid rgba(255, 214, 0, 0.55);
+}
+
+.result-total-rank {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.result-total-name {
+  flex: 1;
+}
+
+.result-total-score {
+  font-weight: 700;
+  color: #ffe98a;
+}
+
 @keyframes wait-pulse {
   0%,
   100% {
@@ -588,30 +660,29 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* 跟弃窗口提示：脉冲闪烁，只提示"可跟弃" */
-.follow-hint {
-  max-width: 220px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(255, 214, 0, 0.16);
-  border: 1.5px solid rgba(255, 214, 0, 0.75);
-  color: #ffe98a;
-  font-size: 13px;
-  line-height: 1.5;
-  text-align: center;
-  animation: follow-pulse 0.9s ease-in-out infinite;
+/* 跟弃窗口：常亮"可跟弃"小标签，固定显示在最新弃牌正上方 */
+.follow-tag {
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #ffd600;
+  color: #3a2d00;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  box-shadow: 0 2px 6px rgba(255, 214, 0, 0.45);
+  white-space: nowrap;
+  z-index: 5;
 }
 
-@keyframes follow-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.5);
-    transform: scale(1);
-  }
-  50% {
-    box-shadow: 0 0 14px 3px rgba(255, 214, 0, 0.55);
-    transform: scale(1.04);
-  }
+.discard-pile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .pile-label {
@@ -619,12 +690,6 @@ body {
   opacity: 0.85;
   margin-bottom: 6px;
   text-align: center;
-}
-
-.discard-pile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
 }
 
 .pile-cards {

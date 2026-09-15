@@ -34,14 +34,13 @@ export default function SwapAnim({
   const [plan, setPlan] = useState<AnimPlan | null>(null);
   const pawRef = useRef<HTMLDivElement>(null);
   const otherRef = useRef<HTMLDivElement>(null);
-  const sigRef = useRef('');
+  const seqRef = useRef(0);
 
   useEffect(() => {
     if (!lastSwap) return;
-    // 内容级防重：联机广播引用常变，内容相同不重播
-    const sig = JSON.stringify(lastSwap);
-    if (sig === sigRef.current) return;
-    sigRef.current = sig;
+    // 按 seq 防重：联机广播引用常变；内容相同但事件不同（同槽位二次换牌）也要播放
+    if (lastSwap.seq <= seqRef.current) return;
+    seqRef.current = lastSwap.seq;
     const selfCard = document.querySelector(
       `[data-player="${lastSwap.selfPlayer}"][data-slot="${lastSwap.selfSlot}"] .card`,
     );

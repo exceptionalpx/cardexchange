@@ -13,16 +13,15 @@ interface Props {
 }
 
 export default function PeekAnim({ lastViewed, mySeat }: Props) {
-  const sigRef = useRef('');
+  const seqRef = useRef(0);
 
   useEffect(() => {
     if (!lastViewed) return;
     // 联机：只有被看者本人需要看到动画（第三人不应得知"哪张牌被看了"）
     if (mySeat !== undefined && lastViewed.targetPlayer !== mySeat) return;
-    // 内容级防重：联机广播引用常变，内容相同不重播
-    const sig = JSON.stringify(lastViewed);
-    if (sig === sigRef.current) return;
-    sigRef.current = sig;
+    // 按 seq 防重：联机广播引用常变；同槽位二次被看也要播放
+    if (lastViewed.seq <= seqRef.current) return;
+    seqRef.current = lastViewed.seq;
     const cardEl = document.querySelector(
       `[data-player="${lastViewed.targetPlayer}"][data-slot="${lastViewed.targetSlot}"] .card`,
     );

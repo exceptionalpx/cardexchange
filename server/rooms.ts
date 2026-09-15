@@ -1,4 +1,6 @@
 // 房间管理：座位、开局、服务器权威调度（AI + 超时）、per-viewer 广播
+// 房间模型：固定 4 个座位，建房只占房主 1 座；房主可添加/移除机器人，真人加入坐空位；
+// 所有真人"准备"后房主才能开局；对局后按座位累计总分（多局连打，总分最小者最终胜）。
 import type { WebSocket } from 'ws';
 import type { Action, GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
@@ -13,19 +15,27 @@ export interface Seat {
   /** 头像：内置 emoji 或 dataURL */
   avatar?: string;
   ws: WebSocket | null;
+  /** 真人准备状态（机器人恒 true） */
+  ready: boolean;
 }
 
 export interface Room {
   code: string;
   seats: Seat[];
-  totalPlayers: number;
-  botCount: number;
   hostId: number;
   state: GameState | null;
+  /** 对局内座位号 → 玩家 id 映射（压缩连续 id；未参与对局为 -1） */
+  pidBySeat: number[] | null;
   timers: Set<ReturnType<typeof setTimeout>>;
+  /** 按座位累计的手牌总分（多局连打） */
+  totalScores: Record<number, number>;
+  gamesPlayed: number;
+  /** 本局是否已累计（restart 时重置，防止重复累加） */
+  scoringDone: boolean;
 }
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+export const MAX_SEATS = 4;
 
 export function genCode(exists: (code: string) => boolean): string {
   let code = '';
@@ -35,30 +45,73 @@ export function genCode(exists: (code: string) => boolean): string {
   return code;
 }
 
-export function createRoom(
-  code: string,
-  name: string,
-  totalPlayers: number,
-  botCount: number,
-  avatar?: string,
-): Room {
-  const seats: Seat[] = [];
-  for (let i = 0; i < totalPlayers; i++) {
-    const isBot = i >= totalPlayers - botCount;
-    seats.push({ id: i, name: isBot ? `机器人${i + 1}` : `玩家${i + 1}`, isBot, ws: null });
-  }
-  seats[0].name = name;
-  seats[0].avatar = avatar;
-  return { code, seats, totalPlayers, botCount, hostId: 0, state: null, timers: new Set() };
+export function emptySeat(id: number): Seat {
+  return { id, name: '', isBot: false, ws: null, ready: false };
 }
 
-/** 找一个真人空位加入（房主座位 0 保留），返回座位号；房间已满返回 null */
+/** 建房：只占房主 1 座，其余 3 座为空位，人数/机器人由房主后续调整 */
+export function createRoom(code: string, name: string, avatar?: string): Room {
+  const seats: Seat[] = [
+    { id: 0, name, isBot: false, ws: null, avatar, ready: false },
+    emptySeat(1),
+    emptySeat(2),
+    emptySeat(3),
+  ];
+  return {
+    code,
+    seats,
+    hostId: 0,
+    state: null,
+    pidBySeat: null,
+    timers: new Set(),
+    totalScores: {},
+    gamesPlayed: 0,
+    scoringDone: false,
+  };
+}
+
+/** 找一个真人空位加入（房主座位 0 已占），返回座位号；房间已满返回 null */
 export function joinRoom(room: Room, name: string, avatar?: string): number | null {
-  const idx = room.seats.findIndex((s) => s.id !== room.hostId && !s.isBot && !s.ws);
+  const idx = room.seats.findIndex((s) => !s.isBot && !s.ws);
   if (idx < 0) return null;
   room.seats[idx].name = name;
   room.seats[idx].avatar = avatar;
+  room.seats[idx].ready = false;
   return idx;
+}
+
+/** 房主添加一个机器人（把第一个空位变机器人）；无空位返回 false */
+export function addBot(room: Room): boolean {
+  if (room.state) return false; // 对局中锁定
+  const idx = room.seats.findIndex((s) => !s.isBot && !s.ws);
+  if (idx < 0) return false;
+  const botN = room.seats.filter((s) => s.isBot).length + 1;
+  room.seats[idx] = { id: idx, name: `机器人${botN}`, isBot: true, ws: null, ready: true };
+  return true;
+}
+
+/** 房主移除最后一个机器人（变回空位）；无机器人返回 false */
+export function removeBot(room: Room): boolean {
+  if (room.state) return false; // 对局中锁定
+  let idx = -1;
+  for (let i = room.seats.length - 1; i >= 0; i--) {
+    if (room.seats[i].isBot) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx < 0) return false;
+  room.seats[idx] = emptySeat(idx);
+  return true;
+}
+
+/** 真人切换准备状态；机器人/对局中忽略 */
+export function setReady(room: Room, seatId: number, ready: boolean): boolean {
+  if (room.state) return false;
+  const s = room.seats[seatId];
+  if (!s || s.isBot || !s.ws) return false;
+  s.ready = ready;
+  return true;
 }
 
 export function seatInfo(room: Room): RoomSeatInfo[] {
@@ -68,6 +121,7 @@ export function seatInfo(room: Room): RoomSeatInfo[] {
     isBot: s.isBot,
     avatar: s.avatar,
     taken: s.isBot || !!s.ws,
+    ready: s.ready,
   }));
 }
 
@@ -77,24 +131,30 @@ export interface RoomLite {
   hostName: string;
   /** 已加入的真人人数 */
   humanFilled: number;
-  /** 真人位总数 */
+  /** 真人位总数（4 - 机器人数量，机器人占位不可加入） */
   humanTotal: number;
   inGame: boolean;
 }
 
 export function roomLiteInfo(room: Room): RoomLite {
   const humans = room.seats.filter((s) => !s.isBot);
+  const bots = room.seats.filter((s) => s.isBot).length;
   return {
     code: room.code,
     hostName: room.seats[0]?.name ?? '',
     humanFilled: humans.filter((s) => !!s.ws).length,
-    humanTotal: humans.length,
+    humanTotal: MAX_SEATS - bots,
     inGame: !!room.state,
   };
 }
 
+/** 能否开局：等待中 + 总人数 ≥2 + 至少 1 真人 + 所有真人已准备（空位不参与） */
 export function canStart(room: Room): boolean {
-  return room.state === null && room.seats.every((s) => s.isBot || !!s.ws);
+  if (room.state) return false;
+  const humans = room.seats.filter((s) => !s.isBot && !!s.ws);
+  const occupied = room.seats.filter((s) => s.isBot || !!s.ws);
+  if (occupied.length < 2 || humans.length === 0) return false;
+  return humans.every((s) => s.ready);
 }
 
 export function clearTimers(room: Room): void {
@@ -155,6 +215,7 @@ function schedule(room: Room): void {
           if (ns !== s) {
             room.state = ns;
             schedule(room);
+            scoreIfEnded(room);
             broadcastView(room);
           }
         }, 4000),
@@ -170,6 +231,7 @@ function step(room: Room, action: Action): void {
   if (next === state) return; // 非法或无变化（幂等）
   room.state = next;
   schedule(room);
+  scoreIfEnded(room);
   broadcastView(room);
 }
 
@@ -205,13 +267,23 @@ export function handleAction(room: Room, playerId: number, action: Action): void
 
 // ---------- 对局生命周期 ----------
 
+/** 开局：把占用座位压缩为连续玩家 id（座位号 → pid 映射进 pidBySeat） */
 export function startGame(room: Room): void {
   if (!canStart(room)) return;
+  const occupied = room.seats.filter((s) => s.isBot || !!s.ws);
+  if (occupied.length < 2) return;
+  const count = occupied.length;
+  room.pidBySeat = room.seats.map((s) => {
+    const i = occupied.indexOf(s);
+    return i >= 0 ? i : -1;
+  });
+  room.scoringDone = false;
   room.state = createGame({
-    playerCount: room.totalPlayers,
-    botCount: room.botCount,
-    playerNames: room.seats.map((s) => s.name),
-    avatars: room.seats.map((s) => s.avatar),
+    playerCount: count,
+    botCount: occupied.filter((s) => s.isBot).length,
+    playerNames: occupied.map((s) => s.name),
+    avatars: occupied.map((s) => s.avatar),
+    bots: occupied.map((s) => s.isBot),
   });
   schedule(room);
   broadcastView(room);
@@ -219,14 +291,37 @@ export function startGame(room: Room): void {
 
 export function restartGame(room: Room): void {
   if (!room.state) return;
+  const occupied = room.seats.filter((s) => s.isBot || !!s.ws);
+  if (occupied.length < 2) return;
+  const count = occupied.length;
+  room.pidBySeat = room.seats.map((s) => {
+    const i = occupied.indexOf(s);
+    return i >= 0 ? i : -1;
+  });
+  room.scoringDone = false;
   room.state = createGame({
-    playerCount: room.totalPlayers,
-    botCount: room.botCount,
-    playerNames: room.seats.map((s) => s.name),
-    avatars: room.seats.map((s) => s.avatar),
+    playerCount: count,
+    botCount: occupied.filter((s) => s.isBot).length,
+    playerNames: occupied.map((s) => s.name),
+    avatars: occupied.map((s) => s.avatar),
+    bots: occupied.map((s) => s.isBot),
   });
   schedule(room);
   broadcastView(room);
+}
+
+/** 结算：对局结束且本局未累计过 → 按座位累加手牌总分 */
+export function scoreIfEnded(room: Room): void {
+  const st = room.state;
+  if (!st || st.phase !== 'end' || room.scoringDone) return;
+  room.scoringDone = true;
+  room.gamesPlayed += 1;
+  for (let pid = 0; pid < st.players.length; pid++) {
+    const seatId = room.seats.findIndex((s) => room.pidBySeat?.[s.id] === pid);
+    if (seatId >= 0) {
+      room.totalScores[seatId] = (room.totalScores[seatId] ?? 0) + (st.players[pid].score ?? 0);
+    }
+  }
 }
 
 // ---------- 广播 ----------
@@ -234,15 +329,30 @@ export function restartGame(room: Room): void {
 export function broadcastView(room: Room): void {
   const state = room.state;
   if (!state) return;
+  // 累计分按"对局内玩家 id"对齐下发（结算页 players 用 pid，座位号与 pid 不同）
+  const metaTotal: Record<number, number> = {};
+  for (const [seatIdStr, v] of Object.entries(room.totalScores)) {
+    const pid = room.pidBySeat?.[Number(seatIdStr)] ?? -1;
+    if (pid >= 0) metaTotal[pid] = v;
+  }
   for (const seat of room.seats) {
     if (seat.isBot || !seat.ws || seat.ws.readyState !== 1) continue;
-    seat.ws.send(JSON.stringify({ type: 'view', view: buildClientView(state, seat.id) }));
+    const pid = room.pidBySeat?.[seat.id] ?? -1;
+    if (pid < 0) continue;
+    seat.ws.send(
+      JSON.stringify({
+        type: 'view',
+        view: buildClientView(state, pid, { totalScores: metaTotal, gamesPlayed: room.gamesPlayed }),
+      }),
+    );
   }
 }
 
 export function broadcastRoom(room: Room): void {
   const seats = seatInfo(room);
   const canStartFlag = canStart(room);
+  const totalScores = room.totalScores;
+  const gamesPlayed = room.gamesPlayed;
   for (const seat of room.seats) {
     if (seat.isBot || !seat.ws || seat.ws.readyState !== 1) continue;
     seat.ws.send(
@@ -252,6 +362,8 @@ export function broadcastRoom(room: Room): void {
         hostId: room.hostId,
         seats,
         canStart: canStartFlag,
+        totalScores,
+        gamesPlayed,
       }),
     );
   }

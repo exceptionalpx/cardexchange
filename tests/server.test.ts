@@ -1,38 +1,100 @@
-// 联机服务器测试：房间管理 + 每玩家视角脱敏
+// 联机服务器测试：房间管理（建房不锁人数/机器人增删/准备开局）+ 累计积分 + 每玩家视角脱敏
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
 import { buildClientView, sanitizePending } from '../server/sanitize';
-import { canStart, createRoom, genCode, joinRoom, roomLiteInfo, seatInfo, startGame, handleAction } from '../server/rooms';
+import {
+  addBot,
+  canStart,
+  createRoom,
+  genCode,
+  joinRoom,
+  removeBot,
+  restartGame,
+  roomLiteInfo,
+  scoreIfEnded,
+  seatInfo,
+  setReady,
+  startGame,
+  handleAction,
+} from '../server/rooms';
 
 function toState(s: unknown): GameState {
   return s as GameState;
 }
 
-describe('房间管理', () => {
-  it('创建房间：房主占 0 号位，机器人占尾座', () => {
-    const room = createRoom('ABCD', '小明', 4, 1);
+describe('房间管理（建房不锁人数）', () => {
+  it('创建房间：房主占 0 号位，其余 3 座为空位', () => {
+    const room = createRoom('ABCD', '小明');
     expect(room.hostId).toBe(0);
     expect(room.seats[0].name).toBe('小明');
     expect(room.seats[0].isBot).toBe(false);
-    expect(room.seats[3].isBot).toBe(true);
-    expect(room.seats[1].isBot).toBe(false);
-    expect(room.seats[2].isBot).toBe(false);
+    expect(room.seats[0].ready).toBe(false);
+    const info = seatInfo(room);
+    for (let i = 1; i < 4; i++) {
+      expect(info[i].taken).toBe(false); // 空位可加入
+    }
+    expect(canStart(room)).toBe(false); // 只有 1 人
   });
 
-  it('真人加入占据空位，满员后可开始', () => {
-    const room = createRoom('ABCD', '小明', 4, 1);
-    room.seats[0].ws = {} as never; // 房主已连接
+  it('添加/移除机器人：房主可把空位变机器人，也可移除', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    expect(addBot(room)).toBe(true);
+    expect(room.seats[1].isBot).toBe(true);
+    expect(room.seats[1].ready).toBe(true); // 机器人恒已准备
+    expect(addBot(room)).toBe(true);
+    expect(room.seats[2].isBot).toBe(true);
+    // 房主 + 2 机器人 = 3 人，但房主未准备 → 不可开始
     expect(canStart(room)).toBe(false);
-    const seat1 = joinRoom(room, '小红');
-    expect(seat1).toBe(1);
-    if (seat1 !== null) room.seats[seat1].ws = {} as never; // 模拟连接
-    expect(canStart(room)).toBe(false);
-    const seat2 = joinRoom(room, '小刚');
+    // 移除机器人：从最后一个机器人开始
+    expect(removeBot(room)).toBe(true);
+    expect(room.seats[2].isBot).toBe(false);
+    expect(removeBot(room)).toBe(true);
+    expect(removeBot(room)).toBe(false); // 没有机器人了
+  });
+
+  it('对局中禁止添加/移除机器人', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    expect(room.state).toBeTruthy();
+    expect(addBot(room)).toBe(false);
+    expect(removeBot(room)).toBe(false);
+  });
+
+  it('准备机制：所有真人准备 + 总人数≥2 才能开始', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room); // 房主 + 机器人
+    setReady(room, 0, true);
+    expect(canStart(room)).toBe(true); // 1 真人已准备 + 1 机器人 = 2 人
+
+    // 真人加入后未准备 → 不可开始（机器人已占 1 号位，真人坐 2 号位）
+    const seat2 = joinRoom(room, '小红');
     expect(seat2).toBe(2);
     if (seat2 !== null) room.seats[seat2].ws = {} as never;
-    expect(canStart(room)).toBe(true); // 4 人：小明+小红+小刚+1 机器人 = 满
-    expect(joinRoom(room, '第四人')).toBe(null); // 已满
+    expect(canStart(room)).toBe(false);
+    setReady(room, 2, true);
+    expect(canStart(room)).toBe(true);
+    // 取消准备 → 不可开始
+    setReady(room, 2, false);
+    expect(canStart(room)).toBe(false);
+  });
+
+  it('真人加入占据空位，满员后无法再加入', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    const s1 = joinRoom(room, '小红');
+    if (s1 !== null) room.seats[s1].ws = {} as never;
+    const s2 = joinRoom(room, '小刚');
+    if (s2 !== null) room.seats[s2].ws = {} as never;
+    const s3 = joinRoom(room, '小丽');
+    if (s3 !== null) room.seats[s3].ws = {} as never;
+    expect([s1, s2, s3]).toEqual([1, 2, 3]);
+    expect(joinRoom(room, '第五人')).toBe(null); // 4 座已满
   });
 
   it('房间码生成：4 位且不重复', () => {
@@ -42,42 +104,135 @@ describe('房间管理', () => {
     expect(code).not.toBe('ABCD');
   });
 
-  it('座位信息：机器人视为已占', () => {
-    const room = createRoom('ABCD', '小明', 3, 1);
+  it('座位信息：机器人与真人连接都视为已占，含准备状态', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
     const info = seatInfo(room);
-    expect(info[0].taken).toBe(false); // 房主已连接但 ws 未设置前不算
-    expect(info[2].taken).toBe(true); // 机器人
-  });
-
-  it('头像：房主带头像创建，加入者头像随座位更新', () => {
-    const room = createRoom('ABCD', '小明', 3, 0, '🐱');
-    expect(room.seats[0].avatar).toBe('🐱');
-    const idx = joinRoom(room, '小红', '🦊');
-    expect(idx).toBe(1);
-    expect(room.seats[1].avatar).toBe('🦊');
-    const info = seatInfo(room);
-    expect(info[0].avatar).toBe('🐱');
-    expect(info[1].avatar).toBe('🦊');
+    expect(info[0].taken).toBe(true);
+    expect(info[0].ready).toBe(false);
+    expect(info[1].taken).toBe(true); // 机器人
+    expect(info[1].ready).toBe(true);
+    expect(info[2].taken).toBe(false); // 空位
   });
 
   it('房间摘要：公开可加入信息，不泄露座位明细', () => {
-    const room = createRoom('ABCD', '小明', 3, 1);
+    const room = createRoom('ABCD', '小明');
     room.seats[0].ws = {} as never;
+    addBot(room);
     const lite = roomLiteInfo(room);
     expect(lite.code).toBe('ABCD');
     expect(lite.hostName).toBe('小明');
-    expect(lite.humanTotal).toBe(2); // 3 人 - 1 机器人
+    expect(lite.humanTotal).toBe(3); // 4 - 1 机器人
     expect(lite.humanFilled).toBe(1); // 房主已连接
     expect(lite.inGame).toBe(false);
   });
 });
 
+describe('开局与座位映射', () => {
+  it('机器人可任意座位：房主 + 机器人坐 1 号位，玩家 id 压缩连续', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    // 让真人加入坐 2 号位，机器人坐 1 号位 → 座位 2 真人、座位 1 机器人
+    const seat2 = joinRoom(room, '小红');
+    expect(seat2).toBe(1);
+    room.seats[1].ws = {} as never;
+    addBot(room); // 机器人坐 2 号位
+    setReady(room, 0, true);
+    setReady(room, 1, true);
+    expect(canStart(room)).toBe(true);
+    startGame(room);
+    expect(room.state).toBeTruthy();
+    expect(room.pidBySeat).toEqual([0, 1, 2, -1]);
+    const s = toState(room.state);
+    expect(s.players.length).toBe(3);
+    expect(s.players[0].isBot).toBe(false); // 小明
+    expect(s.players[1].isBot).toBe(false); // 小红
+    expect(s.players[2].isBot).toBe(true); // 机器人
+  });
+
+  it('startGame：机器人坐任意位置时 isBot 按座位正确分配', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room); // 机器人 1 号位
+    addBot(room); // 机器人 2 号位
+    setReady(room, 0, true);
+    startGame(room);
+    const s = toState(room.state);
+    expect(s.players.length).toBe(3);
+    expect(s.players.map((p) => p.isBot)).toEqual([false, true, true]);
+    // 机器人发牌自动确认，真人需确认
+    expect(s.dealConfirmed).toEqual([false, true, true]);
+  });
+});
+
+describe('多局累计积分', () => {
+  function endedState(base: GameState, scores: number[]): GameState {
+    return toState({
+      ...base,
+      phase: 'end',
+      winner: [0],
+      players: base.players.map((p, i) => ({ ...p, score: scores[i] ?? 0 })),
+    });
+  }
+
+  it('对局结束累加手牌总分，重复调用不重复累加；再来一局后重新累计', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    const base = toState(room.state);
+    room.state = endedState(base, [10, 20]);
+    scoreIfEnded(room);
+    expect(room.gamesPlayed).toBe(1);
+    expect(room.totalScores[0]).toBe(10);
+    expect(room.totalScores[1]).toBe(20);
+    // 幂等：同一局不再重复累加
+    scoreIfEnded(room);
+    expect(room.gamesPlayed).toBe(1);
+    expect(room.totalScores[0]).toBe(10);
+
+    // 再来一局：累计保留，第二局继续累加
+    restartGame(room);
+    expect(room.state?.phase).toBe('deal');
+    const base2 = toState(room.state);
+    room.state = endedState(base2, [5, 15]);
+    scoreIfEnded(room);
+    expect(room.gamesPlayed).toBe(2);
+    expect(room.totalScores[0]).toBe(15);
+    expect(room.totalScores[1]).toBe(35);
+  });
+
+  it('buildClientView 下发累计分时按对局玩家 id 对齐（座位号≠玩家 id）', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    const base = toState(room.state);
+    room.state = endedState(base, [10, 20]);
+    scoreIfEnded(room);
+    // 手动构造一次广播视图（与 broadcastView 相同口径）
+    const view = buildClientView(toState(room.state), 0, {
+      totalScores: { 0: 10, 1: 20 },
+      gamesPlayed: 1,
+    });
+    expect(view.totalScores[0]).toBe(10);
+    expect(view.totalScores[1]).toBe(20);
+    expect(view.gamesPlayed).toBe(1);
+  });
+});
+
 describe('视角脱敏 sanitize', () => {
   it('联机发牌并行确认：handleAction 注入发送者座位，非 currentPlayer 的真人也可确认自己', () => {
-    const room = createRoom('WXYZ', '小明', 2, 0);
+    const room = createRoom('WXYZ', '小明');
     room.seats[0].ws = {} as never;
-    joinRoom(room, '小红');
-    room.seats[1].ws = {} as never;
+    const seat1 = joinRoom(room, '小红');
+    expect(seat1).toBe(1);
+    if (seat1 !== null) room.seats[seat1].ws = {} as never;
+    setReady(room, 0, true);
+    setReady(room, 1, true);
     startGame(room);
     const s = toState(room.state);
     expect(s.phase).toBe('deal');
@@ -152,5 +307,30 @@ describe('视角脱敏 sanitize', () => {
     // 机器人视角（不向其推送，但验证脱敏逻辑对任意 viewer 成立）
     const v1 = buildClientView(g, 1);
     if (v1.pending?.kind === 'drawn') expect(v1.pending.card).toBeUndefined();
+  });
+
+  it('buildClientView：透传 lastDiscard；follow 脱敏（只告知本人是否可跟）', () => {
+    const g = toState(createGame({ playerCount: 2, botCount: 0 }));
+    const followState = toState({
+      ...g,
+      phase: 'follow',
+      lastDiscard: { id: 'h6', suit: 'hearts', rank: '6' },
+      follow: {
+        discarder: 0,
+        targetScore: 6,
+        decisions: { 0: 'pass', 1: 'pending' },
+        submitted: false,
+      },
+    });
+    const v0 = buildClientView(followState, 0);
+    expect(v0.lastDiscard?.id).toBe('h6'); // 最新弃牌公开透传（黑框/可跟弃标签）
+    expect(v0.follow?.discarder).toBe(0);
+    expect(v0.follow?.targetScore).toBe(6);
+    expect(v0.follow?.canFollow).toBe(false); // 玩家 0 是 pass
+    expect((v0.follow as unknown as { decisions?: unknown }).decisions).toBeUndefined(); // 不泄露他人 pending
+
+    const v1 = buildClientView(followState, 1);
+    expect(v1.follow?.canFollow).toBe(true); // 玩家 1 是 pending
+    expect((v1.follow as unknown as { decisions?: unknown }).decisions).toBeUndefined();
   });
 });

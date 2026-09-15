@@ -42,6 +42,8 @@ const PHASE_LABEL: Record<GameState['phase'], string> = {
 
 const REVEAL_MS = 5000; // 翻看展示限时
 const FOLLOW_WINDOW_MS = 4000; // 跟弃窗口固定时长
+/** 热座/单机多局累计积分（localStorage，按真人玩家名累计） */
+const TOTAL_KEY = 'cardexchange-total-scores';
 
 /**
  * 计算翻看/明换展示中需要强制正面的牌。
@@ -84,6 +86,9 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // 规则/游戏进程面板：点击按钮展开，默认收起
   const [showRules, setShowRules] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  // 热座/单机多局累计（本地 localStorage）
+  const [localTotals, setLocalTotals] = useState<{ games: number; scores: Record<string, number> } | null>(null);
+  const scoredRef = useRef(false);
 
   // 联机：状态来自服务器视图；本地：内部 reducer
   const state = isOnline && online ? (online.view as unknown as GameState) : localState;
@@ -178,6 +183,30 @@ export default function GameScreen({ config, online, onExit }: Props) {
     return () => clearTimeout(t);
   }, [state.pending]);
 
+  // ---- 热座/单机：结算时把本局手牌总分累加到本地累计（按真人玩家名） ----
+  useEffect(() => {
+    if (isOnline) return;
+    if (state.phase === 'deal') {
+      scoredRef.current = false; // 新局开始，重置防重标记
+      return;
+    }
+    if (state.phase !== 'end' || scoredRef.current) return;
+    scoredRef.current = true;
+    try {
+      const raw = localStorage.getItem(TOTAL_KEY);
+      const prev = raw ? (JSON.parse(raw) as { games: number; scores: Record<string, number> }) : { games: 0, scores: {} };
+      const scores = { ...prev.scores };
+      for (const p of state.players) {
+        scores[p.name] = (scores[p.name] ?? 0) + (p.score ?? 0);
+      }
+      const next = { games: (prev.games ?? 0) + 1, scores };
+      localStorage.setItem(TOTAL_KEY, JSON.stringify(next));
+      setLocalTotals(next);
+    } catch {
+      /* localStorage 不可用时静默跳过累计 */
+    }
+  }, [state.phase, state.players, isOnline]);
+
   // ---- 视角：本地为当前行动玩家；联机用服务器按 viewer 生成的视图 ----
   const view = useMemo(
     () => (isOnline && online ? online.view.view : buildView(state, state.currentPlayer)),
@@ -193,21 +222,14 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
   const deckCount = isOnline && online ? online.view.deckCount : state.deck.length;
   const pend = state.pending;
-  // 跟弃窗口提示：本地热座任一真人 pending 即提示（共享屏幕）；联机仅提示自己
+  // 跟弃窗口提示：窗口开启即显示（固定于最新弃牌上方），不依赖自己是否同分——判断留给玩家记忆
   const followHint = useMemo(() => {
     if (state.phase !== 'follow' || !state.follow || !state.lastDiscard) return null;
-    const d = state.follow.decisions;
-    if (isOnline) {
-      const meId = online.myId;
-      if (meId === undefined || d[meId] !== 'pending') return null;
-    } else if (!state.players.some((p, i) => !p.isBot && d[i] === 'pending')) {
-      return null;
-    }
     return {
-      name: state.players[state.follow.discarder].name,
+      name: state.players[state.follow.discarder]?.name ?? '',
       cardLabel: cardLabel(state.lastDiscard),
     };
-  }, [state, isOnline, online]);
+  }, [state]);
   const selectableSelf =
     pend?.kind === 'chooseSelfSlot' ||
     pend?.kind === 'chooseSwap' ||
@@ -232,12 +254,22 @@ export default function GameScreen({ config, online, onExit }: Props) {
   }
 
   if (state.phase === 'end') {
+    // 热座本地累计 → 按玩家 id 对齐
+    let localScores: Record<number, number> | null = null;
+    if (!isOnline && localTotals) {
+      localScores = {};
+      for (const p of state.players) {
+        if (localTotals.scores[p.name] !== undefined) localScores[p.id] = localTotals.scores[p.name];
+      }
+    }
     return (
       <ResultScreen
         state={state}
         onRestart={restart}
         canRestart={isOnline ? online.canRestart : true}
         onExit={onExit}
+        totalScores={isOnline && online ? online.view.totalScores : localScores}
+        gamesPlayed={isOnline && online ? online.view.gamesPlayed : localTotals?.games}
       />
     );
   }
@@ -314,13 +346,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
               </div>
               <div className="deck-count">{deckCount} 张</div>
             </div>
-            {/* 跟弃窗口提示：只提示"可跟弃"，不透露哪张牌同分（判断留给玩家记忆） */}
-            {followHint && (
-              <div className="follow-hint" role="status">
-                {followHint.name} 弃了 {followHint.cardLabel}，有同分牌可点「弃」跟弃
-              </div>
-            )}
-            <DiscardPile state={state} />
+            {/* 跟弃窗口提示：固定显示在最新弃牌正上方（常亮"可跟弃"标签） */}
+            <DiscardPile state={state} followHint={followHint} />
             <UsedPile state={state} />
           </div>
 

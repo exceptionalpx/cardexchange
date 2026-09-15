@@ -100,23 +100,26 @@ export interface GameState {
   lastDiscard: Card | null;
   follow: FollowState | null;
   pending: PendingAction | null;
-  /** 最近一次换牌（暗换 J/Q、明换 K 交换）双方换入的槽位，UI 据此标记 3 秒 */
+  /** 最近一次换牌（暗换 J/Q、明换 K 交换）双方换入的槽位，UI 据此标记 3 秒；seq 单调递增供动画防重 */
   lastSwap: {
     actor: number;
     selfPlayer: number;
     selfSlot: number;
     otherPlayer: number;
     otherSlot: number;
+    seq: number;
   } | null;
   /** 最近一次弃牌/替换动作（动画数据：弃牌/被替换旧牌会公开进弃牌堆，故可含牌面；替换新牌保密不含） */
   lastMove:
-    | { kind: 'discard'; actor: number; card: Card } // 弃牌：座位 → 弃牌堆（真实牌面）
-    | { kind: 'replace'; actor: number; slot: number; replaced: Card } // 替换：新牌（背面）座位 → 槽位；被替换旧牌（真实牌面）槽位 → 弃牌堆
+    | { kind: 'discard'; actor: number; card: Card; seq: number } // 弃牌：座位 → 弃牌堆（真实牌面）
+    | { kind: 'replace'; actor: number; slot: number; replaced: Card; seq: number } // 替换：新牌（背面）座位 → 槽位；被替换旧牌（真实牌面）槽位 → 弃牌堆
     | null;
   /** 最近一次"看牌"动作（9/10 看他人 / K 明换查看对方），目标牌被拿起放下提示动画；不含牌面 */
-  lastViewed: { actor: number; targetPlayer: number; targetSlot: number } | null;
+  lastViewed: { actor: number; targetPlayer: number; targetSlot: number; seq: number } | null;
   /** 最近一次跟弃失败的惩罚补牌（牌从牌堆飞入被罚玩家槽位，背面飞行，不含牌面） */
-  lastPenalty: { actor: number; slot: number } | null;
+  lastPenalty: { actor: number; slot: number; seq: number } | null;
+  /** 动画事件号：每次写 lastSwap/lastMove/lastViewed/lastPenalty 时 +1（客户端按 seq 防重，内容相同的新事件也播放） */
+  animSeq: number;
   /** 定牌后剩余待操作轮次（不含定牌玩家） */
   finalRemaining: number;
   winner: number[] | null;
@@ -126,11 +129,13 @@ export interface GameState {
 export interface GameConfig {
   /** 总人数 2~4 */
   playerCount: number;
-  /** 机器人数量，0 ~ playerCount-1（默认 1 名真人，其余为机器人） */
+  /** 机器人数量，0 ~ playerCount-1（默认 1 名真人，其余为机器人；与 bots 二选一，bots 优先） */
   botCount: number;
   playerNames?: string[];
   /** 各座位头像（emoji 或 dataURL，可选，与座位号对齐；未设置的座位为 undefined） */
   avatars?: (string | undefined)[];
+  /** 各座位是否机器人（可选：联机房间座位可任意位置混坐；缺省按 botCount 让机器人坐末尾） */
+  bots?: boolean[];
 }
 
 // ---- 动作定义 ----

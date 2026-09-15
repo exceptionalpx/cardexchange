@@ -34,8 +34,12 @@ export function sanitizePending(
   }
 }
 
-/** 为指定玩家构造下发的对局视图 */
-export function buildClientView(state: GameState, viewerId: number): ClientGameView {
+/** 为指定玩家构造下发的对局视图（meta 为房间级公开结算信息：多局累计分） */
+export function buildClientView(
+  state: GameState,
+  viewerId: number,
+  meta?: { totalScores: Record<number, number>; gamesPlayed: number },
+): ClientGameView {
   return {
     viewerId,
     deckCount: state.deck.length,
@@ -51,9 +55,21 @@ export function buildClientView(state: GameState, viewerId: number): ClientGameV
     lastMove: state.lastMove,
     lastViewed: state.lastViewed,
     lastPenalty: state.lastPenalty,
+    // 最新弃牌（黑框/可跟弃提示）为公开信息，必须透传，否则联机黑框与提示不显示
+    lastDiscard: state.lastDiscard,
+    // 跟弃窗口脱敏：只告知本人"是否可跟"，不透传他人 pending（避免泄露谁有同分牌）
+    follow: state.follow
+      ? {
+          discarder: state.follow.discarder,
+          targetScore: state.follow.targetScore,
+          canFollow: state.follow.decisions[viewerId] === 'pending',
+        }
+      : null,
     finalRemaining: state.finalRemaining,
     winner: state.winner,
     log: state.log,
     view: buildView(state, viewerId),
+    totalScores: meta?.totalScores ?? {},
+    gamesPlayed: meta?.gamesPlayed ?? 0,
   };
 }

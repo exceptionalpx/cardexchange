@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientMessage } from './protocol';
 import {
+  addBot,
   broadcastRoom,
   broadcastView,
   canStart,
@@ -15,10 +16,12 @@ import {
   genCode,
   handleAction,
   joinRoom,
+  removeBot,
   restartGame,
   Room,
   roomLiteInfo,
   seatInfo,
+  setReady,
   startGame,
 } from './rooms';
 
@@ -116,9 +119,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case 'createRoom': {
       const code = genCode((c) => rooms.has(c));
-      const total = Math.min(4, Math.max(2, msg.totalPlayers));
-      const bots = Math.min(total - 1, Math.max(0, msg.botCount));
-      const room = createRoom(code, msg.name.trim() || `玩家${1}`, total, bots, msg.avatar);
+      const room = createRoom(code, msg.name.trim() || '玩家1', msg.avatar);
       rooms.set(code, room);
       room.seats[0].ws = ws;
       connMeta.set(ws, { code, seatId: 0 });
@@ -128,9 +129,9 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         playerId: 0,
         hostId: room.hostId,
         seats: seatInfo(room),
-        totalPlayers: total,
-        botCount: bots,
         canStart: canStart(room),
+        totalScores: room.totalScores,
+        gamesPlayed: room.gamesPlayed,
       });
       return;
     }
@@ -145,7 +146,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         send(ws, { type: 'error', message: '该房间对局已开始，无法加入' });
         return;
       }
-      const seatId = joinRoom(room, msg.name.trim() || `玩家${room.totalPlayers - room.botCount}`, msg.avatar);
+      const seatId = joinRoom(room, msg.name.trim() || `玩家${room.seats.length}`, msg.avatar);
       if (seatId === null) {
         send(ws, { type: 'error', message: '房间已满' });
         return;
@@ -158,11 +159,37 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         playerId: seatId,
         hostId: room.hostId,
         seats: seatInfo(room),
-        totalPlayers: room.totalPlayers,
-        botCount: room.botCount,
         canStart: canStart(room),
+        totalScores: room.totalScores,
+        gamesPlayed: room.gamesPlayed,
       });
       broadcastRoom(room);
+      return;
+    }
+    case 'addBot': {
+      const meta = connMeta.get(ws);
+      if (!meta) return;
+      const room = rooms.get(meta.code);
+      if (!room || room.hostId !== meta.seatId) return;
+      addBot(room);
+      broadcastRoom(room);
+      return;
+    }
+    case 'removeBot': {
+      const meta = connMeta.get(ws);
+      if (!meta) return;
+      const room = rooms.get(meta.code);
+      if (!room || room.hostId !== meta.seatId) return;
+      removeBot(room);
+      broadcastRoom(room);
+      return;
+    }
+    case 'ready': {
+      const meta = connMeta.get(ws);
+      if (!meta) return;
+      const room = rooms.get(meta.code);
+      if (!room) return;
+      if (setReady(room, meta.seatId, msg.ready)) broadcastRoom(room);
       return;
     }
     case 'rejoin': {
@@ -190,20 +217,23 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
             playerId: msg.playerId,
             hostId: room.hostId,
             seats: seatInfo(room),
-            totalPlayers: room.totalPlayers,
-            botCount: room.botCount,
             canStart: canStart(room),
+            totalScores: room.totalScores,
+            gamesPlayed: room.gamesPlayed,
           });
           broadcastRoom(room);
         } else {
-          send(ws, { type: 'gameStart', myId: msg.playerId });
-          // 对局中重连：补发房间信息，保证 hostId/canStart 可用
+          // 对局中重连：myId 用对局内玩家 id（view.viewerId 口径一致）
+          const pid = room.pidBySeat?.[msg.playerId] ?? -1;
+          send(ws, { type: 'gameStart', myId: pid });
           send(ws, {
             type: 'roomUpdate',
             code,
             hostId: room.hostId,
             seats: seatInfo(room),
             canStart: canStart(room),
+            totalScores: room.totalScores,
+            gamesPlayed: room.gamesPlayed,
           });
           broadcastView(room);
         }
@@ -218,7 +248,9 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       if (room.hostId !== meta.seatId) return;
       startGame(room);
       for (const seat of room.seats) {
-        if (!seat.isBot && seat.ws) send(seat.ws, { type: 'gameStart', myId: seat.id });
+        if (seat.isBot || !seat.ws) continue;
+        const pid = room.pidBySeat?.[seat.id] ?? -1;
+        if (pid >= 0) send(seat.ws, { type: 'gameStart', myId: pid });
       }
       return;
     }
@@ -227,7 +259,10 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       if (!meta) return;
       const room = rooms.get(meta.code);
       if (!room || !room.state) return;
-      handleAction(room, meta.seatId, msg.action);
+      // 玩家操作统一按对局内玩家 id（座位压缩后连续编号）
+      const pid = room.pidBySeat?.[meta.seatId] ?? -1;
+      if (pid < 0) return;
+      handleAction(room, pid, msg.action);
       return;
     }
     case 'restart': {

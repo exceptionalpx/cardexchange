@@ -47,6 +47,7 @@ function makeGame(
     lastMove: null,
     lastViewed: null,
     lastPenalty: null,
+    animSeq: 0,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -582,13 +583,14 @@ describe('换牌标记 lastSwap', () => {
     g = applyAction(g, { type: 'USE_ABILITY' });
     g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 0 });
     g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 0 });
-    expect(g.lastSwap).toEqual({
+    expect(g.lastSwap).toMatchObject({
       actor: 0,
       selfPlayer: 0,
       selfSlot: 0,
       otherPlayer: 1,
       otherSlot: 0,
     });
+    expect(g.lastSwap?.seq).toBeGreaterThan(0); // 动画事件带递增 seq
   });
 
   it('K 明换选择不换：不记录 lastSwap', () => {
@@ -748,14 +750,14 @@ describe('lastMove 动画数据', () => {
     const s = makeGame([[card('A'), card('2'), card('3'), card('4')]], { deck: [card('9')] });
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'DISCARD_DRAWN' });
-    expect(g.lastMove).toEqual({ kind: 'discard', actor: 0, card: card('9') });
+    expect(g.lastMove).toMatchObject({ kind: 'discard', actor: 0, card: card('9') });
   });
 
   it('替换手牌：写入 replace 动画数据（含槽位与被替换旧牌面；新牌保密不含）', () => {
     const s = makeGame([[card('A'), card('2'), card('3'), card('4')]], { deck: [card('9')] });
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'REPLACE', slot: 2 });
-    expect(g.lastMove).toEqual({ kind: 'replace', actor: 0, slot: 2, replaced: card('3') });
+    expect(g.lastMove).toMatchObject({ kind: 'replace', actor: 0, slot: 2, replaced: card('3') });
     // 被替换的旧牌进弃牌堆，新牌进槽位
     expect(g.players[0].handSlots[2]).toEqual(card('9'));
     expect(g.discardPile).toContainEqual(card('3'));
@@ -769,7 +771,7 @@ describe('lastMove 动画数据', () => {
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'USE_ABILITY' });
     g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 2 });
-    expect(g.lastViewed).toEqual({ actor: 0, targetPlayer: 1, targetSlot: 2 });
+    expect(g.lastViewed).toMatchObject({ actor: 0, targetPlayer: 1, targetSlot: 2 });
   });
 
   it('7/8 看自己牌：记录目标槽位（lastViewed 指向自己，UI 播拿起动画）', () => {
@@ -777,7 +779,7 @@ describe('lastMove 动画数据', () => {
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'USE_ABILITY' });
     g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 2 });
-    expect(g.lastViewed).toEqual({ actor: 0, targetPlayer: 0, targetSlot: 2 });
+    expect(g.lastViewed).toMatchObject({ actor: 0, targetPlayer: 0, targetSlot: 2 });
     expect(g.pending?.kind).toBe('revealDone');
   });
 
@@ -790,7 +792,7 @@ describe('lastMove 动画数据', () => {
     g = applyAction(g, { type: 'USE_ABILITY' });
     g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 0 });
     g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 1 });
-    expect(g.lastViewed).toEqual({ actor: 0, targetPlayer: 1, targetSlot: 1 });
+    expect(g.lastViewed).toMatchObject({ actor: 0, targetPlayer: 1, targetSlot: 1 });
     expect(g.pending?.kind).toBe('confirmReveal');
   });
 });
