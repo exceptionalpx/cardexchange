@@ -33,33 +33,30 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
 
   useEffect(() => {
     if (!lastMove) return;
-    const raf = requestAnimationFrame(() => {
-      const seatEl = document.querySelector(`[data-player="${lastMove.actor}"]`);
-      if (!(seatEl instanceof HTMLElement)) return;
-      const sr = seatEl.getBoundingClientRect();
-      const discardEl = document.querySelector('.discard-pile .pile-cards');
-      if (!(discardEl instanceof HTMLElement)) return;
-      const dr = discardEl.getBoundingClientRect();
-      const base: Plan = {
-        kind: lastMove.kind,
-        seat: { x: sr.left + sr.width / 2 - 20, y: sr.top + sr.height / 2 - 28, w: 40, h: 56 },
-        discard: { x: dr.left + dr.width / 2 - 20, y: dr.top + dr.height / 2 - 28, w: 40, h: 56 },
-      };
-      if (lastMove.kind === 'replace') {
-        const slotEl = document.querySelector(
-          `[data-player="${lastMove.actor}"][data-slot="${lastMove.slot}"] .card`,
-        );
-        if (!(slotEl instanceof HTMLElement)) return;
-        const sl = slotEl.getBoundingClientRect();
-        base.slot = { x: sl.left, y: sl.top, w: sl.width, h: sl.height };
-      }
-      setPlan(base);
-    });
-    const t = setTimeout(() => setPlan(null), DURATION);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t);
+    console.log('[MoveAnim] effect', lastMove);
+    const seatEl = document.querySelector(`[data-player="${lastMove.actor}"]`);
+    if (!(seatEl instanceof HTMLElement)) return;
+    const sr = seatEl.getBoundingClientRect();
+    const discardEl = document.querySelector('.discard-pile .pile-cards');
+    if (!(discardEl instanceof HTMLElement)) return;
+    const dr = discardEl.getBoundingClientRect();
+    const base: Plan = {
+      kind: lastMove.kind,
+      seat: { x: sr.left + sr.width / 2 - 20, y: sr.top + sr.height / 2 - 28, w: 40, h: 56 },
+      discard: { x: dr.left + dr.width / 2 - 20, y: dr.top + dr.height / 2 - 28, w: 40, h: 56 },
     };
+    if (lastMove.kind === 'replace') {
+      const slotEl = document.querySelector(
+        `[data-player="${lastMove.actor}"][data-slot="${lastMove.slot}"] .card`,
+      );
+      if (!(slotEl instanceof HTMLElement)) return;
+      const sl = slotEl.getBoundingClientRect();
+      base.slot = { x: sl.left, y: sl.top, w: sl.width, h: sl.height };
+    }
+    console.log('[MoveAnim] setPlan', base);
+    setPlan(base);
+    const t = setTimeout(() => setPlan(null), DURATION);
+    return () => clearTimeout(t);
   }, [lastMove]);
 
   // 播放动画
