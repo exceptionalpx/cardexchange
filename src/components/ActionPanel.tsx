@@ -1,7 +1,7 @@
 import type { Action, Card, GameState } from '../core/types';
 import { canApply } from '../core/engine';
 import { scoreOf } from '../core/score';
-import { cardLabel } from './CardView';
+import CardView, { cardLabel } from './CardView';
 
 interface Props {
   state: GameState;
@@ -144,6 +144,10 @@ export default function ActionPanel({
       const ability = abilityDesc(pend.card);
       return (
         <div className="action-panel">
+          <div className="drawn-card">
+            <CardView card={pend.card} known faceUp />
+            {ability && <span className="drawn-ability">{ability}</span>}
+          </div>
           <p className="hint">
             {current.name} 摸到了 <b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}）
             {ability ? ` · 功能：${ability}` : ''}，请选择处理方式：

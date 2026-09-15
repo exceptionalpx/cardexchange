@@ -22,7 +22,10 @@ export default function PlayerSeat({
   onDiscard,
 }: Props) {
   return (
-    <div className={`seat ${isCurrent ? 'seat-current' : ''} ${isDeclared ? 'seat-declared' : ''}`}>
+    <div
+      className={`seat ${isCurrent ? 'seat-current' : ''} ${isDeclared ? 'seat-declared' : ''}`}
+      data-player={player.id}
+    >
       <div className="seat-name">
         {player.avatar && <span className="avatar avatar-sm">{player.avatar}</span>}
         {player.name}

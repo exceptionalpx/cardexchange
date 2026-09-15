@@ -426,6 +426,53 @@ body {
   opacity: 0.8;
 }
 
+/* ---------- 最新弃牌标记（黑色描边） ---------- */
+.card-newest {
+  outline: 3px solid #111;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- 功能区（发动过功能的牌） ---------- */
+.used-pile .pile-label {
+  color: #ffe9a8;
+}
+
+/* ---------- 摸到的牌展示（放大牌面 + 功能徽章） ---------- */
+.drawn-card {
+  position: relative;
+  transform: scale(1.15);
+  margin: 4px 0 10px;
+}
+
+.drawn-card .card {
+  width: 72px;
+  height: 102px;
+  font-size: 20px;
+}
+
+.drawn-ability {
+  position: absolute;
+  left: 50%;
+  bottom: -22px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #ff8a3d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- 飞行白卡（弃牌/替换动画中的"一张牌"副本） ---------- */
+.fly-card-face {
+  background: #fffdf6;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
 /* ---------- 对局 ---------- */
 .game {
   height: 100%;

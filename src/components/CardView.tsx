@@ -19,9 +19,11 @@ interface Props {
   onClick?: () => void;
   selectable?: boolean;
   highlight?: boolean;
+  /** 附加样式类（如最新弃牌黑框） */
+  extraClass?: string;
 }
 
-export default function CardView({ card, known, faceUp, onClick, selectable, highlight }: Props) {
+export default function CardView({ card, known, faceUp, onClick, selectable, highlight, extraClass }: Props) {
   if (!card) {
     return <div className="card card-empty" />;
   }
@@ -32,6 +34,7 @@ export default function CardView({ card, known, faceUp, onClick, selectable, hig
   if (selectable) classes.push('card-selectable');
   if (highlight) classes.push('card-highlight');
   if (show && isRed(card)) classes.push('card-red');
+  if (extraClass) classes.push(extraClass);
 
   if (!show) {
     return <div className={classes.join(' ')} onClick={onClick}>?</div>;

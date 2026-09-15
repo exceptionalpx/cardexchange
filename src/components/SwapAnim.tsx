@@ -4,6 +4,7 @@
 // 信息边界：飞行副本一律背面，不展示牌面内容。
 import { useEffect, useRef, useState } from 'react';
 import type { GameState } from '../core/types';
+import PawSvg from './Paw';
 
 const DURATION = 1500;
 
@@ -107,23 +108,5 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
         <div className="swap-fly-card card card-back">?</div>
       </div>
     </div>
-  );
-}
-
-/** 动漫猫爪（圆润肉垫 + 爪尖） */
-function PawSvg() {
-  return (
-    <svg viewBox="0 0 100 100" className="swap-paw-svg">
-      {/* 主肉垫 */}
-      <ellipse cx="50" cy="66" rx="26" ry="20" fill="#f6a9bd" stroke="#8c3a52" strokeWidth="3" />
-      {/* 三个爪趾 */}
-      <ellipse cx="24" cy="34" rx="11" ry="14" fill="#f6a9bd" stroke="#8c3a52" strokeWidth="3" transform="rotate(-18 24 34)" />
-      <ellipse cx="50" cy="26" rx="11" ry="15" fill="#f6a9bd" stroke="#8c3a52" strokeWidth="3" />
-      <ellipse cx="76" cy="34" rx="11" ry="14" fill="#f6a9bd" stroke="#8c3a52" strokeWidth="3" transform="rotate(18 76 34)" />
-      {/* 爪尖 */}
-      <path d="M20 16 L26 26 L14 24 Z" fill="#8c3a52" />
-      <path d="M50 6 L52 18 L48 18 Z" fill="#8c3a52" />
-      <path d="M80 16 L86 24 L74 26 Z" fill="#8c3a52" />
-    </svg>
   );
 }
