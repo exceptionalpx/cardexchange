@@ -30,6 +30,8 @@ interface Plan {
   /** penalty：被罚玩家与槽位（落位后高亮用） */
   targetPlayer?: number;
   targetSlot?: number;
+  /** replace：动画期间隐藏的目标槽位牌（空槽），结束恢复 */
+  hideEl?: HTMLElement | null;
 }
 
 interface Props {
@@ -71,10 +73,19 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
       if (!(slotEl instanceof HTMLElement)) return;
       const sl = slotEl.getBoundingClientRect();
       base.slot = { x: sl.left, y: sl.top, w: sl.width, h: sl.height };
+      // 空槽：动画期间被替换槽位隐藏（旧牌被拿走、新牌未落定），动画结束恢复显示新牌
+      base.hideEl = slotEl;
+      base.hideEl.classList.add('slot-hide');
     }
     setPlan(base);
-    const t = setTimeout(() => setPlan(null), DURATION);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => {
+      setPlan(null);
+      base.hideEl?.classList.remove('slot-hide');
+    }, DURATION);
+    return () => {
+      clearTimeout(t);
+      base.hideEl?.classList.remove('slot-hide');
+    };
   }, [lastMove]);
 
   // 罚牌：背面牌从牌堆飞入槽位，落位后槽位高亮
@@ -147,7 +158,7 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
       }
       return;
     }
-    // replace：猫爪送新牌（背面）进槽位 + 旧牌弹出到弃牌堆
+    // replace：猫爪送新牌（背面）进槽位（先落定，约 0.75s）→ 停顿 → 旧牌弹出到弃牌堆（后走，主次分明不交叉）
     const paw = pawRef.current;
     const oldCard = oldRef.current;
     if (!paw || !oldCard || !plan.slot) return;
@@ -160,7 +171,7 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
         { transform: `translate(${dx}px, ${dy}px) scale(1.1)`, offset: 0.92 },
         { transform: `translate(${dx}px, ${dy}px) scale(1)`, offset: 1 },
       ],
-      { duration: 1050, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+      { duration: 750, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
     );
     const odx = plan.discard.x - plan.slot.x;
     const ody = plan.discard.y - plan.slot.y;
@@ -170,7 +181,7 @@ export default function MoveAnim({ lastMove, lastPenalty }: Props) {
         { transform: `translate(${odx / 2}px, ${ody / 2 - 60}px) scale(1.04)`, offset: 0.5, opacity: 1 },
         { transform: `translate(${odx}px, ${ody}px) scale(0.72)`, offset: 1, opacity: 0.9 },
       ],
-      { duration: 800, delay: 260, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+      { duration: 700, delay: 450, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
     );
   }, [plan]);
 

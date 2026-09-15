@@ -714,8 +714,13 @@ body {
   z-index: 60;
 }
 
-/* ---------- 罚牌落位高亮（跟弃失败补的牌） ---------- */
-.penalty-flash {
+/* ---------- 空槽：换牌/替换动画期间牌被拿起，槽位暂时为空 ---------- */
+.slot-hide {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* ---------- 罚牌落位高亮（跟弃失败补的牌） ---------- */.penalty-flash {
   position: relative;
   z-index: 55;
   outline: 3px solid #f6c945;

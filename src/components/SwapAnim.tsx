@@ -43,14 +43,25 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
     if (!(selfCard instanceof HTMLElement) || !(otherCard instanceof HTMLElement)) return;
     const sr = selfCard.getBoundingClientRect();
     const or = otherCard.getBoundingClientRect();
+    // 空槽：动画期间两张牌"离开"原位，槽位显示为空（更真实），动画结束恢复显示换后的牌
+    selfCard.classList.add('slot-hide');
+    otherCard.classList.add('slot-hide');
     setPlan({
       selfFrom: { x: sr.left, y: sr.top, w: sr.width, h: sr.height },
       selfTo: { x: or.left, y: or.top, w: or.width, h: or.height },
       otherFrom: { x: or.left, y: or.top, w: or.width, h: or.height },
       otherTo: { x: sr.left, y: sr.top, w: sr.width, h: sr.height },
     });
-    const t = setTimeout(() => setPlan(null), DURATION);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => {
+      setPlan(null);
+      selfCard.classList.remove('slot-hide');
+      otherCard.classList.remove('slot-hide');
+    }, DURATION);
+    return () => {
+      clearTimeout(t);
+      selfCard.classList.remove('slot-hide');
+      otherCard.classList.remove('slot-hide');
+    };
   }, [lastSwap]);
 
   // 播放位移动画（WAAPI）：自己牌+猫爪先飞，对方牌延迟反向飞

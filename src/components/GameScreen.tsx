@@ -321,7 +321,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
         <SwapAnim lastSwap={state.lastSwap} />
         <MoveAnim lastMove={state.lastMove} lastPenalty={state.lastPenalty} />
-        <PeekAnim lastViewed={state.lastViewed} />
+        <PeekAnim lastViewed={state.lastViewed} mySeat={isOnline && online ? online.myId : undefined} />
 
         <ActionPanel
           state={state}

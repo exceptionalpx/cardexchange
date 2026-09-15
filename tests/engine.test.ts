@@ -704,6 +704,15 @@ describe('lastMove 动画数据', () => {
     expect(g.lastViewed).toEqual({ actor: 0, targetPlayer: 1, targetSlot: 2 });
   });
 
+  it('7/8 看自己牌：记录目标槽位（lastViewed 指向自己，UI 播拿起动画）', () => {
+    const s = makeGame([[card('A'), card('2'), card('3'), card('4')]], { deck: [card('7')], currentPlayer: 0 });
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'USE_ABILITY' });
+    g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 2 });
+    expect(g.lastViewed).toEqual({ actor: 0, targetPlayer: 0, targetSlot: 2 });
+    expect(g.pending?.kind).toBe('revealDone');
+  });
+
   it('K 明换查看对方：记录被看槽位（lastViewed 不含牌面）', () => {
     const s = makeGame(
       [[card('A'), card('2'), card('3'), card('4')], [card('5'), card('6'), card('7'), card('8')]],

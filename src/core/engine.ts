@@ -386,6 +386,8 @@ function pickSelfSlot(state: GameState, slot: number): GameState {
       ...state,
       players,
       pending: { kind: 'revealDone', card, viewer: me.id },
+      // 看自己牌也记录目标槽位：UI 播放拿起-晃动-放下（牌面仅对自己展示）
+      lastViewed: { actor: me.id, targetPlayer: me.id, targetSlot: slot },
       log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的一张牌`)],
     };
   }
