@@ -141,10 +141,12 @@ export default function ActionPanel({
   if (pend?.kind === 'drawn') {
     if (pend.card) {
       const canAbility = canApply(state, { type: 'USE_ABILITY' });
+      const ability = abilityDesc(pend.card);
       return (
         <div className="action-panel">
           <p className="hint">
-            {current.name} 摸到了 <b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}），请选择处理方式：
+            {current.name} 摸到了 <b>{cardLabel(pend.card)}</b>（{scoreText(pend.card)}）
+            {ability ? ` · 功能：${ability}` : ''}，请选择处理方式：
           </p>
           <div className="btn-row">
             {canAbility && (
@@ -194,4 +196,23 @@ export default function ActionPanel({
 function scoreText(card: Card): string {
   const score = scoreOf(card);
   return score > 0 ? `+${score}分` : `${score}分`;
+}
+
+/** 功能牌说明（无功能的普通牌返回空） */
+function abilityDesc(card: Card): string | null {
+  switch (card.rank) {
+    case '7':
+    case '8':
+      return '看自己一张牌';
+    case '9':
+    case '10':
+      return '看其他玩家一张牌';
+    case 'J':
+    case 'Q':
+      return '暗换：用自己的牌换对方一张牌';
+    case 'K':
+      return '明换：看双方一张牌后决定换不换';
+    default:
+      return null;
+  }
 }
