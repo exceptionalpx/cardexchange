@@ -660,10 +660,14 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* 跟弃窗口：常亮"可跟弃"小标签，固定显示在最新弃牌正上方 */
+/* 跟弃窗口：常亮"可跟弃"小标签，固定显示在最新弃牌（黑框牌）正上方 */
+.pile-newest-wrap {
+  position: relative;
+}
+
 .follow-tag {
   position: absolute;
-  top: -26px;
+  top: -30px;
   left: 50%;
   transform: translateX(-50%);
   padding: 2px 10px;
@@ -679,7 +683,6 @@ body {
 }
 
 .discard-pile {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -688,7 +691,7 @@ body {
 .pile-label {
   font-size: 13px;
   opacity: 0.85;
-  margin-bottom: 6px;
+  margin-bottom: 30px; /* 为"可跟弃"标签预留空间 */
   text-align: center;
 }
 
