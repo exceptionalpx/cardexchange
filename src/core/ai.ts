@@ -49,42 +49,42 @@ function decidePending(state: GameState, playerId: number, pend: PendingAction):
     case 'drawn':
       return decideDrawn(state, playerId, pend.card);
     case 'chooseSelfSlot': {
+      // 7/8 查看自己：优先未知槽位
       const view = buildView(state, playerId);
       const me = view.players[playerId];
-      if (pend.purpose === 'view') {
-        // 查看自己：优先未知槽位
-        const unknownIdx = me.slots.findIndex((s) => s.card && !s.known);
-        const idx = unknownIdx >= 0 ? unknownIdx : me.slots.findIndex((s) => s.card);
-        return safe({ type: 'PICK_SELF_SLOT', slot: idx }, state, fallbackSelf(state, playerId));
-      }
-      // 换牌：选自己已知最高分槽位
-      let bestIdx = -1;
-      let bestScore = -Infinity;
-      me.slots.forEach((s, i) => {
-        if (s.card && s.known && scoreOf(s.card) > bestScore) {
-          bestScore = scoreOf(s.card);
-          bestIdx = i;
-        }
-      });
-      const idx = bestIdx >= 0 ? bestIdx : me.slots.findIndex((s) => s.card);
+      const unknownIdx = me.slots.findIndex((s) => s.card && !s.known);
+      const idx = unknownIdx >= 0 ? unknownIdx : me.slots.findIndex((s) => s.card);
       return safe({ type: 'PICK_SELF_SLOT', slot: idx }, state, fallbackSelf(state, playerId));
     }
     case 'chooseOtherSlot': {
+      // 9/10 查看他人：优先未知槽位
       const view = buildView(state, playerId);
-      const others = view.players.filter(
-        (p) => p.id !== playerId && (pend.purpose === 'swap' ? p.id !== state.declaredPlayer : true),
-      );
+      const others = view.players.filter((p) => p.id !== playerId);
       for (const op of others) {
         for (let i = 0; i < op.slots.length; i++) {
           const s = op.slots[i];
-          if (!s.card) continue;
-          if (pend.purpose === 'view' && !s.known) {
-            return safe({ type: 'PICK_OTHER', playerId: op.id, slot: i }, state, fallbackOther(state, playerId));
-          }
-          if (pend.purpose === 'swap') {
+          if (s.card && !s.known) {
             return safe({ type: 'PICK_OTHER', playerId: op.id, slot: i }, state, fallbackOther(state, playerId));
           }
         }
+      }
+      return fallbackOther(state, playerId);
+    }
+    case 'chooseSwap': {
+      // 换牌（J/Q/K）任意顺序：先选自己已知最高分，再选对方任意一张
+      if (pend.selfSlot === null) {
+        const view = buildView(state, playerId);
+        const me = view.players[playerId];
+        let bestIdx = -1;
+        let bestScore = -Infinity;
+        me.slots.forEach((s, i) => {
+          if (s.card && s.known && scoreOf(s.card) > bestScore) {
+            bestScore = scoreOf(s.card);
+            bestIdx = i;
+          }
+        });
+        const idx = bestIdx >= 0 ? bestIdx : me.slots.findIndex((s) => s.card);
+        return safe({ type: 'PICK_SELF_SLOT', slot: idx }, state, fallbackSelf(state, playerId));
       }
       return fallbackOther(state, playerId);
     }

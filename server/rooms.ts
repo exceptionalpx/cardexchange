@@ -111,11 +111,7 @@ function schedule(room: Room): void {
   if (!state || state.phase === 'end') return;
   const cur = state.players[state.currentPlayer];
 
-  // 发牌：机器人自动看牌确认
-  if (state.phase === 'deal' && cur.isBot) {
-    room.timers.add(setTimeout(() => step(room, { type: 'CONFIRM_DEAL' }), 600));
-    return;
-  }
+  // 发牌阶段：机器人开局已确认（createGame dealConfirmed=true），真人各自点击确认，无需服务器调度
   // 正常回合：机器人决策
   if ((state.phase === 'playing' || state.phase === 'final') && cur.isBot) {
     room.timers.add(setTimeout(() => step(room, aiDecide(state, cur.id)), 700));
@@ -184,6 +180,13 @@ function allowed(room: Room, playerId: number, action: Action): boolean {
   const state = room.state;
   if (!state) return false;
   switch (action.type) {
+    case 'CONFIRM_DEAL':
+      // 发牌阶段：真人可确认自己（联机并行确认，不要求是 currentPlayer）
+      return (
+        state.phase === 'deal' &&
+        !state.players[playerId].isBot &&
+        !state.dealConfirmed[playerId]
+      );
     case 'TRY_FOLLOW':
     case 'PASS_FOLLOW':
       return action.playerId === playerId;
@@ -194,7 +197,10 @@ function allowed(room: Room, playerId: number, action: Action): boolean {
 
 export function handleAction(room: Room, playerId: number, action: Action): void {
   if (!allowed(room, playerId, action)) return;
-  step(room, action);
+  // 联机发牌：确认动作归属注入为发送者座位（客户端无需自行传座位号）
+  const effective: Action =
+    action.type === 'CONFIRM_DEAL' ? { type: 'CONFIRM_DEAL', playerId } : action;
+  step(room, effective);
 }
 
 // ---------- 对局生命周期 ----------

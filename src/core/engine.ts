@@ -110,6 +110,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     players,
     currentPlayer: 0,
     phase: 'deal',
+    dealConfirmed: players.map((p) => p.isBot), // 机器人发牌无需看牌，开局即确认
     declaredPlayer: null,
     lastDiscard: null,
     follow: null,
@@ -128,8 +129,12 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
 
 export function canApply(state: GameState, action: Action): boolean {
   switch (action.type) {
-    case 'CONFIRM_DEAL':
-      return state.phase === 'deal';
+    case 'CONFIRM_DEAL': {
+      if (state.phase !== 'deal') return false;
+      const pid = action.playerId ?? state.currentPlayer;
+      const p = state.players[pid];
+      return !!p && !p.isBot && !state.dealConfirmed[pid];
+    }
     case 'DECLARE':
       return (
         state.phase === 'playing' &&
@@ -161,20 +166,22 @@ export function canApply(state: GameState, action: Action): boolean {
     }
     case 'PICK_SELF_SLOT': {
       const pend = state.pending;
-      if (!pend || pend.kind !== 'chooseSelfSlot') return false;
+      if (!pend) return false;
+      if (pend.kind !== 'chooseSelfSlot' && pend.kind !== 'chooseSwap') return false;
       const me = state.players[state.currentPlayer];
       return action.slot >= 0 && action.slot < me.handSlots.length && me.handSlots[action.slot] !== null;
     }
     case 'PICK_OTHER': {
       const pend = state.pending;
-      if (!pend || pend.kind !== 'chooseOtherSlot') return false;
+      if (!pend) return false;
+      if (pend.kind !== 'chooseOtherSlot' && pend.kind !== 'chooseSwap') return false;
       if (action.playerId < 0 || action.playerId >= state.players.length) return false;
       if (action.playerId === state.currentPlayer) return false;
       const target = state.players[action.playerId];
       if (action.slot < 0 || action.slot >= target.handSlots.length) return false;
       if (target.handSlots[action.slot] === null) return false;
       // 定牌后不能对已定牌玩家换牌（看牌允许）
-      if (pend.purpose === 'swap' && state.declaredPlayer === action.playerId) return false;
+      if (pend.kind === 'chooseSwap' && state.declaredPlayer === action.playerId) return false;
       return true;
     }
     case 'SWAP':
@@ -204,7 +211,7 @@ export function applyAction(state: GameState, action: Action): GameState {
   if (!canApply(state, action)) return state;
   switch (action.type) {
     case 'CONFIRM_DEAL':
-      return confirmDeal(state);
+      return confirmDeal(state, action.playerId);
     case 'DECLARE':
       return declare(state);
     case 'DRAW':
@@ -236,27 +243,38 @@ export function applyAction(state: GameState, action: Action): GameState {
 
 // ---- deal ----
 
-function confirmDeal(state: GameState): GameState {
-  const me = state.players[state.currentPlayer];
+function confirmDeal(state: GameState, playerId?: number): GameState {
+  const pid = playerId ?? state.currentPlayer;
+  const me = state.players[pid];
+  if (!me || me.isBot || state.dealConfirmed[pid]) return state;
   // 看牌：将自己 4 张牌写入 knowledge
   let updated = me;
   for (const card of me.handSlots) {
     if (card) updated = addKnowledge(updated, card);
   }
-  const players = state.players.map((p) => (p.id === me.id ? updated : p));
-  let next = nextPlayer(state, state.currentPlayer);
-  let phase: GameState['phase'] = 'deal';
-  if (next === 0) {
-    // 全部确认完毕，进入 playing，从玩家 0 开始
-    phase = 'playing';
-    next = 0;
+  const players = state.players.map((p) => (p.id === pid ? updated : p));
+  const confirmed = [...state.dealConfirmed];
+  confirmed[pid] = true;
+  const allHumansConfirmed = state.players.every((p) => p.isBot || confirmed[p.id]);
+  if (!allHumansConfirmed) {
+    // 还有真人未盖牌：currentPlayer 指向下一个未确认真人（供热座轮流 UI），联机并行确认互不阻塞
+    const next = state.players.findIndex((p) => !p.isBot && !confirmed[p.id]);
+    return {
+      ...state,
+      players,
+      dealConfirmed: confirmed,
+      currentPlayer: next >= 0 ? next : state.currentPlayer,
+      log: [...state.log, log(state, pid, `${playerName(state, pid)} 看过并盖好手牌`)],
+    };
   }
+  // 全部真人确认完毕，进入 playing，从玩家 0 开始
   return {
     ...state,
     players,
-    currentPlayer: next,
-    phase,
-    log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 看过并盖好手牌`)],
+    dealConfirmed: confirmed,
+    currentPlayer: 0,
+    phase: 'playing',
+    log: [...state.log, log(state, pid, `${playerName(state, pid)} 看过并盖好手牌`)],
   };
 }
 
@@ -363,7 +381,11 @@ function useAbility(state: GameState): GameState {
     return { ...base, pending: { kind: 'chooseOtherSlot', purpose: 'view', ability: rank } };
   }
   if (rank === 'J' || rank === 'Q' || rank === 'K') {
-    return { ...base, pending: { kind: 'chooseSelfSlot', purpose: 'swap', ability: rank } };
+    // 换牌：自己与对方各选一张，任意顺序（chooseSwap），选完即执行
+    return {
+      ...base,
+      pending: { kind: 'chooseSwap', ability: rank, selfSlot: null, otherPlayer: null, otherSlot: null },
+    };
   }
   return base;
 }
@@ -372,30 +394,32 @@ function useAbility(state: GameState): GameState {
 
 function pickSelfSlot(state: GameState, slot: number): GameState {
   const pend = state.pending;
-  if (pend?.kind !== 'chooseSelfSlot') return state;
+  if (!pend) return state;
   const me = state.players[state.currentPlayer];
   const card = me.handSlots[slot];
   if (!card) return state;
 
-  if (pend.purpose === 'view') {
-    // 查看自己一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
-    // 日志不写具体牌面（记忆考验：翻看后不标记，联机日志对所有玩家安全）
-    const updated = addKnowledge(me, card);
-    const players = state.players.map((p) => (p.id === me.id ? updated : p));
-    return {
-      ...state,
-      players,
-      pending: { kind: 'revealDone', card, viewer: me.id },
-      // 看自己牌也记录目标槽位：UI 播放拿起-晃动-放下（牌面仅对自己展示）
-      lastViewed: { actor: me.id, targetPlayer: me.id, targetSlot: slot },
-      log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的一张牌`)],
-    };
+  if (pend.kind === 'chooseSwap') {
+    // 换牌选择：记录自己的牌，若对方也已选则执行
+    if (pend.selfSlot === slot) return state;
+    const next: GameState = { ...state, pending: { ...pend, selfSlot: slot } };
+    return maybeExecuteSwap(next);
   }
 
-  // 选择自己槽位后，进入选择对方槽位
+  if (pend.kind !== 'chooseSelfSlot') return state;
+  if (pend.purpose !== 'view') return state;
+
+  // 7/8 查看自己一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
+  // 日志不写具体牌面（记忆考验：翻看后不标记，联机日志对所有玩家安全）
+  const updated = addKnowledge(me, card);
+  const players = state.players.map((p) => (p.id === me.id ? updated : p));
   return {
     ...state,
-    pending: { kind: 'chooseOtherSlot', purpose: 'swap', ability: pend.ability, selfSlot: slot },
+    players,
+    pending: { kind: 'revealDone', card, viewer: me.id },
+    // 看自己牌也记录目标槽位：UI 播放拿起-晃动-放下（牌面仅对自己展示）
+    lastViewed: { actor: me.id, targetPlayer: me.id, targetSlot: slot },
+    log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的一张牌`)],
   };
 }
 
@@ -403,39 +427,55 @@ function pickSelfSlot(state: GameState, slot: number): GameState {
 
 function pickOther(state: GameState, playerId: number, slot: number): GameState {
   const pend = state.pending;
-  if (pend?.kind !== 'chooseOtherSlot') return state;
+  if (!pend) return state;
   const me = state.players[state.currentPlayer];
   const target = state.players[playerId];
   const card = target.handSlots[slot];
   if (!card) return state;
 
-  if (pend.purpose === 'view') {
-    // 查看其他玩家一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
-    // 日志不写牌面（联机日志对所有玩家安全，不透露被看牌的具体点数）
-    const updated = addKnowledge(me, card);
-    const players = state.players.map((p) => (p.id === me.id ? updated : p));
-    return {
-      ...state,
-      players,
-      pending: { kind: 'revealDone', card, viewer: me.id },
-      // 被看者需要知道"哪一张被看了"：记录目标槽位（不含牌面），UI 播放拿起放下动画
-      lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot },
-      log: [
-        ...state.log,
-        log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的一张牌`),
-      ],
-    };
+  if (pend.kind === 'chooseSwap') {
+    // 换牌选择：记录对方的牌，若自己也已选则执行
+    if (pend.otherPlayer === playerId && pend.otherSlot === slot) return state;
+    const next: GameState = { ...state, pending: { ...pend, otherPlayer: playerId, otherSlot: slot } };
+    return maybeExecuteSwap(next);
   }
 
-  // 交换类
-  const selfSlot = pend.selfSlot;
-  if (selfSlot === undefined) return state;
-  const selfCard = me.handSlots[selfSlot];
-  if (!selfCard) return state;
+  if (pend.kind !== 'chooseOtherSlot' || pend.purpose !== 'view') return state;
+
+  // 9/10 查看其他玩家一张牌：展示牌面（pending revealDone，UI 限时后确认收起）
+  // 日志不写牌面（联机日志对所有玩家安全，不透露被看牌的具体点数）
+  const updated = addKnowledge(me, card);
+  const players = state.players.map((p) => (p.id === me.id ? updated : p));
+  return {
+    ...state,
+    players,
+    pending: { kind: 'revealDone', card, viewer: me.id },
+    // 被看者需要知道"哪一张被看了"：记录目标槽位（不含牌面），UI 播放拿起放下动画
+    lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot },
+    log: [
+      ...state.log,
+      log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的一张牌`),
+    ],
+  };
+}
+
+/**
+ * 换牌选择（chooseSwap）两张都选齐后执行：
+ * - J/Q 暗换：直接交换双方牌
+ * - K 明换：先展示双方牌进入 confirmReveal，由玩家决定换不换
+ */
+function maybeExecuteSwap(state: GameState): GameState {
+  const pend = state.pending;
+  if (pend?.kind !== 'chooseSwap') return state;
+  if (pend.selfSlot === null || pend.otherPlayer === null || pend.otherSlot === null) return state;
+  const me = state.players[state.currentPlayer];
+  const selfCard = me.handSlots[pend.selfSlot];
+  const otherCard = state.players[pend.otherPlayer]?.handSlots[pend.otherSlot];
+  if (!selfCard || !otherCard) return state;
 
   if (pend.ability === 'K') {
     // 明换：先展示双方牌
-    const updated = addKnowledge(addKnowledge(me, selfCard), card);
+    const updated = addKnowledge(addKnowledge(me, selfCard), otherCard);
     const players = state.players.map((p) => (p.id === me.id ? updated : p));
     // 信息隐藏：日志统一不写牌面（联机时对所有玩家安全）
     return {
@@ -443,27 +483,27 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
       players,
       pending: {
         kind: 'confirmReveal',
-        selfSlot,
+        selfSlot: pend.selfSlot,
         selfCard,
-        otherPlayer: playerId,
-        otherSlot: slot,
-        otherCard: card,
+        otherPlayer: pend.otherPlayer,
+        otherSlot: pend.otherSlot,
+        otherCard,
       },
       // 被看者需要知道"哪一张被看了"：记录目标槽位（不含牌面）
-      lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot },
+      lastViewed: { actor: me.id, targetPlayer: pend.otherPlayer, targetSlot: pend.otherSlot },
       log: [
         ...state.log,
         log(
           state,
           me.id,
-          `${playerName(state, me.id)} 使用 K 明换，查看了 ${playerName(state, playerId)} 的一张牌`,
+          `${playerName(state, me.id)} 使用 K 明换，查看了 ${playerName(state, pend.otherPlayer)} 的一张牌`,
         ),
       ],
     };
   }
 
   // 暗换（J/Q）：直接交换
-  return swapCards(state, selfSlot, playerId, slot, `暗换（${pend.ability}）`);
+  return swapCards(state, pend.selfSlot, pend.otherPlayer, pend.otherSlot, `暗换（${pend.ability}）`);
 }
 
 /** 执行交换并清理双方被换走牌的知识 */

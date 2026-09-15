@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
 import { buildClientView, sanitizePending } from '../server/sanitize';
-import { canStart, createRoom, genCode, joinRoom, roomLiteInfo, seatInfo } from '../server/rooms';
+import { canStart, createRoom, genCode, joinRoom, roomLiteInfo, seatInfo, startGame, handleAction } from '../server/rooms';
 
 function toState(s: unknown): GameState {
   return s as GameState;
@@ -73,6 +73,28 @@ describe('房间管理', () => {
 });
 
 describe('视角脱敏 sanitize', () => {
+  it('联机发牌并行确认：handleAction 注入发送者座位，非 currentPlayer 的真人也可确认自己', () => {
+    const room = createRoom('WXYZ', '小明', 2, 0);
+    room.seats[0].ws = {} as never;
+    joinRoom(room, '小红');
+    room.seats[1].ws = {} as never;
+    startGame(room);
+    const s = toState(room.state);
+    expect(s.phase).toBe('deal');
+    expect(s.dealConfirmed).toEqual([false, false]);
+    // 座位 1（小红）先确认，不是 currentPlayer(0)——服务器应注入其座位并放行
+    handleAction(room, 1, { type: 'CONFIRM_DEAL' });
+    expect(toState(room.state).dealConfirmed).toEqual([false, true]);
+    expect(toState(room.state).phase).toBe('deal');
+    // 座位 0（小明）确认后开局
+    handleAction(room, 0, { type: 'CONFIRM_DEAL' });
+    expect(toState(room.state).phase).toBe('playing');
+    expect(toState(room.state).dealConfirmed).toEqual([true, true]);
+    // 已确认玩家重复确认被拒（幂等）
+    handleAction(room, 0, { type: 'CONFIRM_DEAL' });
+    expect(toState(room.state).phase).toBe('playing');
+  });
+
   it('drawn 摸牌：只有当前玩家可见牌面，其他玩家拿不到', () => {
     const s = toState(createGame({ playerCount: 2, botCount: 0 }));
     const s2 = toState(applyAction(s, { type: 'CONFIRM_DEAL' }));
@@ -109,9 +131,8 @@ describe('视角脱敏 sanitize', () => {
 
   it('buildClientView：knowledge 清空、deck 不下发、日志安全', () => {
     const s = toState(createGame({ playerCount: 2, botCount: 1, playerNames: ['小明', '机器人2'] }));
-    // 发牌完成
+    // 发牌完成（仅真人小明确认；机器人开局已确认）
     let g = toState(applyAction(s, { type: 'CONFIRM_DEAL' }));
-    g = toState(applyAction(g, { type: 'CONFIRM_DEAL' }));
     // 摸一张牌进入 drawn
     g = toState(applyAction(g, { type: 'DRAW' }));
 

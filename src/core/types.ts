@@ -61,8 +61,15 @@ export interface FollowState {
 /** 挂起的多步交互 */
 export type PendingAction =
   | { kind: 'drawn'; card: Card } // 刚摸到的牌，等待处理
-  | { kind: 'chooseSelfSlot'; purpose: 'view' | 'swap'; ability: Ability } // 选自己一张槽位
-  | { kind: 'chooseOtherSlot'; purpose: 'view' | 'swap'; ability: Ability; selfSlot?: number } // 选其他玩家+槽位
+  | { kind: 'chooseSelfSlot'; purpose: 'view'; ability: Ability } // 选自己一张槽位（7/8 看自己）
+  | { kind: 'chooseOtherSlot'; purpose: 'view'; ability: Ability } // 选其他玩家+槽位（9/10 看他人）
+  | {
+      kind: 'chooseSwap';
+      ability: Ability; // J/Q/K 换牌：自己与对方各选一张，任意顺序；选完即执行（K 进入 confirmReveal）
+      selfSlot: number | null;
+      otherPlayer: number | null;
+      otherSlot: number | null;
+    }
   | {
       kind: 'confirmReveal';
       selfSlot: number;
@@ -86,6 +93,8 @@ export interface GameState {
   players: PlayerState[];
   currentPlayer: number;
   phase: Phase;
+  /** 发牌阶段各玩家是否已确认盖牌（机器人开局即 true；真人各自确认，联机可并行） */
+  dealConfirmed: boolean[];
   declaredPlayer: number | null;
   /** 触发跟弃窗口的弃牌（最近一次弃牌） */
   lastDiscard: Card | null;
@@ -127,14 +136,14 @@ export interface GameConfig {
 // ---- 动作定义 ----
 
 export type Action =
-  | { type: 'CONFIRM_DEAL' } // 发牌阶段确认盖牌
+  | { type: 'CONFIRM_DEAL'; playerId?: number } // 发牌阶段确认盖牌（联机传自己的座位号；热座可不传，按当前玩家）
   | { type: 'DECLARE' } // 宣布定牌
   | { type: 'DRAW' } // 摸牌
   | { type: 'DISCARD_DRAWN' } // 弃掉刚摸到的牌
   | { type: 'REPLACE'; slot: number } // 用摸到的牌替换手牌槽位
   | { type: 'USE_ABILITY' } // 发动刚摸到的功能牌
-  | { type: 'PICK_SELF_SLOT'; slot: number } // 选择自己的槽位（viewSelf / swap 前半）
-  | { type: 'PICK_OTHER'; playerId: number; slot: number } // 选择其他玩家槽位（viewOther / swap 后半）
+  | { type: 'PICK_SELF_SLOT'; slot: number } // 选择自己的槽位（7/8 看自己；换牌选择其一）
+  | { type: 'PICK_OTHER'; playerId: number; slot: number } // 选择其他玩家槽位（9/10 看他人；换牌选择其一）
   | { type: 'SWAP' } // 明换：确认交换
   | { type: 'KEEP' } // 明换：不交换
   | { type: 'TRY_FOLLOW'; playerId: number; slot: number } // 点击手牌下方"弃"按钮：尝试跟弃（失败则惩罚补牌）

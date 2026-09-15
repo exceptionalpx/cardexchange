@@ -27,12 +27,18 @@ export default function ActionPanel({
   const pend = state.pending;
 
   // 是否是我在操作：联机看座位号，本地看是否为真人
-  const isMe = myId !== undefined ? myId === state.currentPlayer : !current.isBot;
+  // 联机发牌阶段：自己未确认即可操作（并行确认，不看 currentPlayer）
+  const isMe =
+    myId !== undefined
+      ? state.phase === 'deal'
+        ? !state.dealConfirmed[myId]
+        : myId === state.currentPlayer
+      : !current.isBot;
 
   // ---- 非自己行动：只显示等待提示，不读取任何牌面字段 ----
   if (!isMe) {
     if (state.phase === 'deal') {
-      return <div className="action-panel hint">等待 {current.name} 看牌盖牌…</div>;
+      return <div className="action-panel hint">等待其他玩家看牌盖牌…</div>;
     }
     if (state.phase === 'follow') {
       return <div className="action-panel" />; // 跟弃窗口不提示，是否跟弃由玩家自行判断
@@ -50,7 +56,11 @@ export default function ActionPanel({
   if (state.phase === 'deal') {
     return (
       <div className="action-panel">
-        <p className="hint">轮到 {current.name}：请记住你的 4 张牌，确认后盖牌传给下一位玩家。</p>
+        <p className="hint">
+          {myId !== undefined
+            ? '请记住你的 4 张牌，确认后盖牌等待其他玩家。'
+            : `轮到 ${current.name}：请记住你的 4 张牌，确认后盖牌传给下一位玩家。`}
+        </p>
         <button className="btn btn-primary" onClick={() => dispatch({ type: 'CONFIRM_DEAL' })}>
           我记住了，盖牌
         </button>
@@ -116,7 +126,29 @@ export default function ActionPanel({
     return <div className="action-panel hint">正在决定明换…</div>;
   }
 
-  // ---- 槽位选择 ----
+  // ---- 换牌选择（J/Q/K 任意顺序） ----
+  if (pend?.kind === 'chooseSwap') {
+    const abilityName: Record<string, string> = { J: '暗换', Q: '暗换', K: '明换' };
+    const picked: string[] = [];
+    if (pend.selfSlot !== null) picked.push(`我的第 ${pend.selfSlot + 1} 张`);
+    if (pend.otherPlayer !== null)
+      picked.push(`${state.players[pend.otherPlayer].name} 的第 ${(pend.otherSlot ?? 0) + 1} 张`);
+    return (
+      <div className="action-panel">
+        <p className="hint">
+          {current.name}：{abilityName[pend.ability]}——请点击你的一张牌和对方的一张牌（可任意顺序）
+          {picked.length > 0 && (
+            <>
+              <br />
+              已选：{picked.join('、')}，请再选另一张
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  // ---- 槽位选择（7/8 看自己、9/10 看他人） ----
   if (pend?.kind === 'chooseSelfSlot' || pend?.kind === 'chooseOtherSlot') {
     const targetName = pend.kind === 'chooseOtherSlot' ? '其他玩家的' : '自己的';
     const abilityName: Record<string, string> = {
@@ -124,9 +156,6 @@ export default function ActionPanel({
       '8': '查看自己一张牌',
       '9': '查看其他玩家一张牌',
       '10': '查看其他玩家一张牌',
-      J: '暗换一张牌',
-      Q: '暗换一张牌',
-      K: '明换（选牌）',
     };
     return (
       <div className="action-panel">

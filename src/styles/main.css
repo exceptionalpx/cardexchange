@@ -530,17 +530,88 @@ body {
   gap: 6px;
 }
 
+/* 叠牌样式：三层背面牌错位堆叠 + 剩余数量角标 */
+.deck-stub .deck-stack {
+  position: relative;
+  width: 68px;
+  height: 96px;
+}
+
+.deck-stub .deck-card {
+  position: absolute;
+  width: 62px;
+  height: 88px;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #7c2f8f 0%, #5b1f6e 55%, #43154f 100%);
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.deck-stub .deck-card::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+}
+
+.deck-stub .deck-card-1 {
+  left: 0;
+  top: 0;
+  transform: rotate(-6deg);
+}
+
+.deck-stub .deck-card-2 {
+  left: 3px;
+  top: 3px;
+  transform: rotate(2deg);
+}
+
+.deck-stub .deck-card-3 {
+  left: 6px;
+  top: 6px;
+  transform: rotate(7deg);
+}
+
 .deck-stub .deck-count {
-  width: 90px;
-  height: 120px;
-  border: 2px dashed rgba(255, 255, 255, 0.5);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
+  position: relative;
+  z-index: 2;
+  min-width: 72px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 15px;
   font-weight: 700;
-  background: rgba(0, 0, 0, 0.15);
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 跟弃窗口提示：脉冲闪烁，只提示"可跟弃" */
+.follow-hint {
+  max-width: 220px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 214, 0, 0.16);
+  border: 1.5px solid rgba(255, 214, 0, 0.75);
+  color: #ffe98a;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  animation: follow-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes follow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 14px 3px rgba(255, 214, 0, 0.55);
+    transform: scale(1.04);
+  }
 }
 
 .pile-label {

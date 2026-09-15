@@ -38,6 +38,7 @@ function makeGame(
     players,
     currentPlayer: opts.currentPlayer ?? 0,
     phase: opts.phase ?? 'playing',
+    dealConfirmed: players.map((p) => p.isBot),
     declaredPlayer: opts.declaredPlayer ?? null,
     lastDiscard: null,
     follow: null,
@@ -77,17 +78,35 @@ describe('createGame 发牌', () => {
 });
 
 describe('deal 盖牌确认', () => {
-  it('依次确认后进入 playing，每人 knowledge 记录自己的 4 张牌', () => {
+  it('真人确认后进入 playing，真人 knowledge 记录自己的 4 张牌（机器人开局已确认）', () => {
     let s = createGame({ playerCount: 3, botCount: 2 });
-    for (let i = 0; i < 3; i++) {
-      expect(s.phase).toBe('deal');
-      s = applyAction(s, { type: 'CONFIRM_DEAL' });
-    }
+    expect(s.phase).toBe('deal');
+    expect(s.dealConfirmed).toEqual([false, true, true]);
+    s = applyAction(s, { type: 'CONFIRM_DEAL' }); // 仅真人 P0 需确认
     expect(s.phase).toBe('playing');
     expect(s.currentPlayer).toBe(0);
-    for (const p of s.players) {
-      expect(Object.keys(p.knowledge)).toHaveLength(4);
-    }
+    expect(s.dealConfirmed).toEqual([true, true, true]);
+    expect(Object.keys(s.players[0].knowledge)).toHaveLength(4);
+  });
+
+  it('联机多真人可并行确认（任意顺序），全部确认才开局', () => {
+    let s = createGame({ playerCount: 2, botCount: 0 });
+    expect(s.dealConfirmed).toEqual([false, false]);
+    // 玩家 1 先确认（不必是 currentPlayer）
+    s = applyAction(s, { type: 'CONFIRM_DEAL', playerId: 1 });
+    expect(s.phase).toBe('deal');
+    expect(s.dealConfirmed).toEqual([false, true]);
+    // 玩家 0 后确认
+    s = applyAction(s, { type: 'CONFIRM_DEAL', playerId: 0 });
+    expect(s.phase).toBe('playing');
+    expect(s.dealConfirmed).toEqual([true, true]);
+    expect(Object.keys(s.players[0].knowledge)).toHaveLength(4);
+    expect(Object.keys(s.players[1].knowledge)).toHaveLength(4);
+  });
+
+  it('机器人无法确认盖牌（开局已确认）', () => {
+    const s = createGame({ playerCount: 2, botCount: 1 });
+    expect(canApply(s, { type: 'CONFIRM_DEAL', playerId: 1 })).toBe(false);
   });
 });
 
@@ -308,6 +327,56 @@ describe('功能牌', () => {
     expect(g.players[0].knowledge[card('K').id]).toBeUndefined();
     expect(g.players[0].knowledge[card('5').id]).toBeUndefined();
     expect(g.players[1].knowledge[card('K').id]).toBeUndefined();
+  });
+
+  it('换牌任意顺序：先选对方再选自己同样执行（暗换直接交换 / K 进入展示）', () => {
+    // J 暗换：先选对方（P1 槽0），再选自己（P0 槽0）
+    const s = makeGame(
+      [
+        [card('K'), card('A'), card('2'), card('3')],
+        [card('5'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('J')] },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'USE_ABILITY' });
+    expect(g.pending).toEqual({
+      kind: 'chooseSwap',
+      ability: 'J',
+      selfSlot: null,
+      otherPlayer: null,
+      otherSlot: null,
+    });
+    g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 0 });
+    expect(g.pending).toEqual({
+      kind: 'chooseSwap',
+      ability: 'J',
+      selfSlot: null,
+      otherPlayer: 1,
+      otherSlot: 0,
+    });
+    g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 0 });
+    expect(g.pending).toBeNull();
+    expect(g.players[0].handSlots[0]).toEqual(card('5'));
+    expect(g.players[1].handSlots[0]).toEqual(card('K'));
+
+    // K 明换：先选对方再选自己 → 进入 confirmReveal（展示双方牌）
+    const s2 = makeGame(
+      [
+        [card('K'), card('A'), card('2'), card('3')],
+        [card('5'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('K')] },
+    );
+    let g2 = applyAction(s2, { type: 'DRAW' });
+    g2 = applyAction(g2, { type: 'USE_ABILITY' });
+    g2 = applyAction(g2, { type: 'PICK_OTHER', playerId: 1, slot: 1 });
+    g2 = applyAction(g2, { type: 'PICK_SELF_SLOT', slot: 0 });
+    expect(g2.pending?.kind).toBe('confirmReveal');
+    if (g2.pending?.kind === 'confirmReveal') {
+      expect(g2.pending.selfCard).toEqual(card('K'));
+      expect(g2.pending.otherCard).toEqual(card('6'));
+    }
   });
 
   it('K 明换：先展示双方牌，可决定换或不换', () => {
@@ -552,12 +621,12 @@ describe('非法操作拦截', () => {
         phase: 'final',
         declaredPlayer: 1,
         currentPlayer: 0,
-        pending: { kind: 'chooseOtherSlot', purpose: 'swap', ability: 'J', selfSlot: 0 },
+        pending: { kind: 'chooseSwap', ability: 'J', selfSlot: 0, otherPlayer: null, otherSlot: null },
       },
     );
     expect(canApply(s, { type: 'PICK_OTHER', playerId: 1, slot: 0 })).toBe(false);
     expect(canApply(s, { type: 'PICK_OTHER', playerId: 2, slot: 0 })).toBe(true);
-    // 看牌允许
+    // 看牌允许（9/10 可看已定牌玩家）
     const sView = { ...s, pending: { kind: 'chooseOtherSlot', purpose: 'view', ability: '9' } as GameState['pending'] };
     expect(canApply(sView, { type: 'PICK_OTHER', playerId: 1, slot: 0 })).toBe(true);
   });
@@ -568,7 +637,7 @@ describe('非法操作拦截', () => {
         [card('A'), card('2'), card('3'), card('4')],
         [card('5'), card('6'), card('7'), card('8')],
       ],
-      { pending: { kind: 'chooseOtherSlot', purpose: 'swap', ability: 'J', selfSlot: 0 } },
+      { pending: { kind: 'chooseSwap', ability: 'J', selfSlot: 0, otherPlayer: null, otherSlot: null } },
     );
     expect(canApply(s, { type: 'PICK_OTHER', playerId: 0, slot: 0 })).toBe(false);
   });
@@ -578,11 +647,10 @@ describe('状态守恒', () => {
   it('完整流程中全局牌数恒为 54', () => {
     let s = createGame({ playerCount: 3, botCount: 2 });
     expect(countCards(s)).toBe(54);
-    // deal 确认
-    for (let i = 0; i < 3; i++) {
-      s = applyAction(s, { type: 'CONFIRM_DEAL' });
-      expect(countCards(s)).toBe(54);
-    }
+    // deal 确认（仅真人 P0；机器人开局已确认）
+    s = applyAction(s, { type: 'CONFIRM_DEAL' });
+    expect(s.phase).toBe('playing');
+    expect(countCards(s)).toBe(54);
     // 跑若干回合直至终局（用 AI 模拟，见 simulation.test 做完整验证）
     let guard = 0;
     while (s.phase !== 'end' && guard < 200) {

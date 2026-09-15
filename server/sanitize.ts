@@ -44,6 +44,7 @@ export function buildClientView(state: GameState, viewerId: number): ClientGameV
     players: state.players.map((p) => ({ ...p, knowledge: {} })),
     currentPlayer: state.currentPlayer,
     phase: state.phase,
+    dealConfirmed: state.dealConfirmed,
     declaredPlayer: state.declaredPlayer,
     pending: sanitizePending(state.pending, viewerId, state.currentPlayer),
     lastSwap: state.lastSwap,

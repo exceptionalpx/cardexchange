@@ -33,6 +33,7 @@ function makeState(hands: Card[][]): GameState {
     players,
     currentPlayer: 0,
     phase: 'playing' as const,
+    dealConfirmed: players.map(() => true),
     declaredPlayer: null,
     lastDiscard: null,
     follow: null,

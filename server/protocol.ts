@@ -25,6 +25,8 @@ export interface ClientGameView {
   players: PlayerState[];
   currentPlayer: number;
   phase: Phase;
+  /** 发牌阶段各玩家是否已确认盖牌（客户端据此显示"自己是否已盖/等待他人"） */
+  dealConfirmed: boolean[];
   declaredPlayer: number | null;
   /** 挂起交互：牌面字段仅对有权查看的玩家可见，其余为 undefined */
   pending: PendingAction | null;

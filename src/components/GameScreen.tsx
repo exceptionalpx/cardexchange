@@ -14,6 +14,7 @@ import ResultScreen from './ResultScreen';
 import SwapAnim from './SwapAnim';
 import MoveAnim from './MoveAnim';
 import PeekAnim from './PeekAnim';
+import { cardLabel } from './CardView';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
 export interface OnlineGameProps {
@@ -32,9 +33,9 @@ interface Props {
 }
 
 const PHASE_LABEL: Record<GameState['phase'], string> = {
-  deal: '发牌（轮流看牌盖牌）',
+  deal: '发牌（看牌盖牌）',
   playing: '对局中',
-  follow: '对局中', // 跟弃窗口不主动提示，是否跟弃由玩家自行判断
+  follow: '对局中', // 跟弃窗口：提示"可跟弃"，是否跟弃由玩家自行判断
   final: '定牌终局',
   end: '已结束',
 };
@@ -118,9 +119,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
     const timers: ReturnType<typeof setTimeout>[] = [];
     const current = state.players[state.currentPlayer];
 
-    if (state.phase === 'deal' && current.isBot) {
-      timers.push(setTimeout(() => dispatch({ type: 'CONFIRM_DEAL' }), 600));
-    } else if ((state.phase === 'playing' || state.phase === 'final') && current.isBot) {
+    // 发牌阶段：机器人开局已确认（dealConfirmed=true），无需调度
+    if ((state.phase === 'playing' || state.phase === 'final') && current.isBot) {
       timers.push(setTimeout(() => dispatch(aiDecide(state, current.id)), 700));
     } else if (state.phase === 'follow' && state.follow) {
       for (const [idStr, d] of Object.entries(state.follow.decisions)) {
@@ -193,15 +193,36 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
   const deckCount = isOnline && online ? online.view.deckCount : state.deck.length;
   const pend = state.pending;
+  // 跟弃窗口提示：本地热座任一真人 pending 即提示（共享屏幕）；联机仅提示自己
+  const followHint = useMemo(() => {
+    if (state.phase !== 'follow' || !state.follow || !state.lastDiscard) return null;
+    const d = state.follow.decisions;
+    if (isOnline) {
+      const meId = online.myId;
+      if (meId === undefined || d[meId] !== 'pending') return null;
+    } else if (!state.players.some((p, i) => !p.isBot && d[i] === 'pending')) {
+      return null;
+    }
+    return {
+      name: state.players[state.follow.discarder].name,
+      cardLabel: cardLabel(state.lastDiscard),
+    };
+  }, [state, isOnline, online]);
   const selectableSelf =
-    pend?.kind === 'chooseSelfSlot' || (pend?.kind === 'drawn' && replaceMode);
-  const selectableOther = pend?.kind === 'chooseOtherSlot';
+    pend?.kind === 'chooseSelfSlot' ||
+    pend?.kind === 'chooseSwap' ||
+    (pend?.kind === 'drawn' && replaceMode);
+  const selectableOther = pend?.kind === 'chooseOtherSlot' || pend?.kind === 'chooseSwap';
 
   function handleSlotClick(playerId: number, slot: number) {
     if (pend?.kind === 'chooseSelfSlot') {
       if (playerId === state.currentPlayer) dispatch({ type: 'PICK_SELF_SLOT', slot });
     } else if (pend?.kind === 'chooseOtherSlot') {
       if (playerId !== state.currentPlayer) dispatch({ type: 'PICK_OTHER', playerId, slot });
+    } else if (pend?.kind === 'chooseSwap') {
+      // 换牌：任意顺序选自己/对方的牌，两张都选齐引擎自动执行
+      if (playerId === state.currentPlayer) dispatch({ type: 'PICK_SELF_SLOT', slot });
+      else dispatch({ type: 'PICK_OTHER', playerId, slot });
     } else if (pend?.kind === 'drawn' && replaceMode) {
       if (playerId === state.currentPlayer) {
         dispatch({ type: 'REPLACE', slot });
@@ -222,7 +243,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
   }
 
   // 记忆考验：平时一律背面，只有发牌看牌、翻看限时、K 明换展示中的牌正面
-  // 信息隐藏：发牌亮牌仅限"本人"（本地热座=当前真人玩家；联机=自己座位），机器人看牌时自动确认，绝不亮牌
+  // 信息隐藏：发牌亮牌仅限"本人"且未确认（本地热座=当前待确认真人；联机=自己座位），已盖牌立即转背面；机器人无需亮牌
   const dealReveal = state.phase === 'deal';
   const viewPlayers: ViewPlayer[] = view.players.map((vp, i) => ({
     ...vp,
@@ -230,9 +251,9 @@ export default function GameScreen({ config, online, onExit }: Props) {
       if (!s.card) return s;
       const faceUp =
         (dealReveal &&
-          i === state.currentPlayer &&
+          !state.dealConfirmed[i] &&
           !state.players[i].isBot &&
-          (online ? i === online.myId : true)) ||
+          (online ? i === online.myId : i === state.currentPlayer)) ||
         faceUpIds.has(s.card.id);
       return { card: s.card, known: faceUp };
     }),
@@ -286,9 +307,19 @@ export default function GameScreen({ config, online, onExit }: Props) {
         <div className="table">
           <div className="center-area">
             <div className="deck-stub">
-              <div className="pile-label">牌堆</div>
+              <div className="deck-stack" aria-hidden>
+                <div className="deck-card deck-card-1" />
+                <div className="deck-card deck-card-2" />
+                <div className="deck-card deck-card-3" />
+              </div>
               <div className="deck-count">{deckCount} 张</div>
             </div>
+            {/* 跟弃窗口提示：只提示"可跟弃"，不透露哪张牌同分（判断留给玩家记忆） */}
+            {followHint && (
+              <div className="follow-hint" role="status">
+                {followHint.name} 弃了 {followHint.cardLabel}，有同分牌可点「弃」跟弃
+              </div>
+            )}
             <DiscardPile state={state} />
             <UsedPile state={state} />
           </div>

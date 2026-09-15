@@ -34,6 +34,7 @@ function makeState(hands: Card[][], viewerKnowledge: Card[], otherKnowledge: Car
     players,
     currentPlayer: 0,
     phase: 'playing' as const,
+    dealConfirmed: players.map(() => true),
     declaredPlayer: null,
     lastDiscard: null,
     follow: null,
