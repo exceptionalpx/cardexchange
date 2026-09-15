@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { GameConfigUI } from '../App';
+import AvatarPicker, { loadAvatar, AVATAR_KEY } from './AvatarPicker';
 
 const STORAGE_KEY = 'cardexchange-config';
 
@@ -24,6 +25,7 @@ export default function MenuScreen({ onStart, onOnline }: Props) {
   const saved = loadSaved();
   const [playerCount, setPlayerCount] = useState(saved?.playerCount ?? 2);
   const [botCount, setBotCount] = useState(saved?.botCount ?? 1);
+  const [avatar, setAvatar] = useState(loadAvatar());
   const [showRules, setShowRules] = useState(false);
 
   const maxBots = playerCount - 1;
@@ -31,7 +33,8 @@ export default function MenuScreen({ onStart, onOnline }: Props) {
 
   function start() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ playerCount, botCount: validBotCount }));
-    onStart({ playerCount, botCount: validBotCount });
+    localStorage.setItem(AVATAR_KEY, avatar);
+    onStart({ playerCount, botCount: validBotCount, avatars: [avatar] });
   }
 
   return (
@@ -78,6 +81,11 @@ export default function MenuScreen({ onStart, onOnline }: Props) {
             纯热座对战：{playerCount - validBotCount} 名真人轮流操作（共用此屏幕）
           </p>
         )}
+      </div>
+
+      <div className="menu-section">
+        <label>我的头像</label>
+        <AvatarPicker value={avatar} onChange={setAvatar} />
       </div>
 
       <div className="menu-actions">

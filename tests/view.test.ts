@@ -107,4 +107,19 @@ describe('buildView', () => {
     const v = buildView(s, 0);
     expect(v.players[0].slots[0]).toEqual({ card: null, known: true });
   });
+
+  it('头像随视角透传', () => {
+    const s = makeState(
+      [
+        [card('A'), card('2'), card('3'), card('4')],
+        [card('5'), card('6'), card('7'), card('8')],
+      ],
+      [],
+      [],
+    );
+    s.players[0].avatar = '🐱';
+    const v = buildView(s, 0);
+    expect(v.players[0].avatar).toBe('🐱');
+    expect(v.players[1].avatar).toBeUndefined();
+  });
 });

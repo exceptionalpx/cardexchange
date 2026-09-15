@@ -5,6 +5,7 @@ import type { Action } from '../core/types';
 import type { ClientGameView } from '../../server/protocol';
 import LobbyScreen, { ONLINE_KEY } from './LobbyScreen';
 import GameScreen from './GameScreen';
+import { loadAvatar } from './AvatarPicker';
 
 interface Props {
   onExit: () => void;
@@ -15,7 +16,6 @@ interface SavedSession {
   playerId: number;
   name: string;
 }
-
 export default function OnlineFlow({ onExit }: Props) {
   const netRef = useRef<Net | null>(null);
   const [net, setNet] = useState<Net | null>(null);
@@ -56,13 +56,15 @@ export default function OnlineFlow({ onExit }: Props) {
         if (raw) {
           try {
             const saved = JSON.parse(raw) as SavedSession;
-            n.send({ type: 'rejoin', code: saved.code, playerId: saved.playerId, name: saved.name });
-            n.setResume(() => ({
-              type: 'rejoin',
-              code: saved.code,
-              playerId: saved.playerId,
-              name: saved.name,
-            }));
+          const savedAvatar = loadAvatar();
+          n.send({ type: 'rejoin', code: saved.code, playerId: saved.playerId, name: saved.name, avatar: savedAvatar });
+          n.setResume(() => ({
+            type: 'rejoin',
+            code: saved.code,
+            playerId: saved.playerId,
+            name: saved.name,
+            avatar: savedAvatar,
+          }));
           } catch {
             localStorage.removeItem(ONLINE_KEY);
           }

@@ -110,7 +110,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       const code = genCode((c) => rooms.has(c));
       const total = Math.min(4, Math.max(2, msg.totalPlayers));
       const bots = Math.min(total - 1, Math.max(0, msg.botCount));
-      const room = createRoom(code, msg.name.trim() || `玩家${1}`, total, bots);
+      const room = createRoom(code, msg.name.trim() || `玩家${1}`, total, bots, msg.avatar);
       rooms.set(code, room);
       room.seats[0].ws = ws;
       connMeta.set(ws, { code, seatId: 0 });
@@ -137,7 +137,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         send(ws, { type: 'error', message: '该房间对局已开始，无法加入' });
         return;
       }
-      const seatId = joinRoom(room, msg.name.trim() || `玩家${room.totalPlayers - room.botCount}`);
+      const seatId = joinRoom(room, msg.name.trim() || `玩家${room.totalPlayers - room.botCount}`, msg.avatar);
       if (seatId === null) {
         send(ws, { type: 'error', message: '房间已满' });
         return;
@@ -172,6 +172,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
           return;
         }
         seat.name = msg.name.trim() || seat.name;
+        seat.avatar = msg.avatar;
         seat.ws = ws;
         connMeta.set(ws, { code, seatId: msg.playerId });
         if (!room.state) {

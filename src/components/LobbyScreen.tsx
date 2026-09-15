@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Net } from '../net/socket';
 import type { RoomSeatInfo } from '../../server/protocol';
+import AvatarPicker, { loadAvatar, AVATAR_KEY } from './AvatarPicker';
 
 export const ONLINE_KEY = 'cardexchange-online';
 
@@ -22,6 +23,7 @@ interface Props {
 
 export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   const [name, setName] = useState(() => localStorage.getItem('cardexchange-name') ?? '');
+  const [avatar, setAvatar] = useState(loadAvatar());
   const [totalPlayers, setTotalPlayers] = useState(4);
   const [botCount, setBotCount] = useState(2);
   const [joinCode, setJoinCode] = useState('');
@@ -29,7 +31,14 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef(name);
   nameRef.current = name;
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
   const myIdRef = useRef(-1);
+
+  function changeAvatar(v: string) {
+    setAvatar(v);
+    localStorage.setItem(AVATAR_KEY, v);
+  }
 
   useEffect(() => {
     const off = net.onMessage((msg) => {
@@ -54,6 +63,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
             code: msg.code,
             playerId: msg.playerId,
             name: nameRef.current,
+            avatar: avatarRef.current,
           }));
           break;
         }
@@ -102,6 +112,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
           {room.seats.map((s) => (
             <div key={s.id} className={`room-seat ${s.id === room.myId ? 'room-seat-me' : ''}`}>
               <span className="room-seat-name">
+                {s.avatar && <span className="avatar avatar-sm">{s.avatar}</span>}
                 座位 {s.id + 1}：{s.name}
               </span>
               {s.id === room.hostId && <span className="badge">房主</span>}
@@ -147,6 +158,9 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
           placeholder="输入你的昵称"
           onChange={(e) => setName(e.target.value)}
         />
+        <div className="avatar-lobby">
+          <AvatarPicker value={avatar} onChange={changeAvatar} />
+        </div>
       </div>
 
       <div className="lobby-cols">
@@ -190,7 +204,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
                 setError('请先输入昵称');
                 return;
               }
-              net.send({ type: 'createRoom', name, totalPlayers, botCount });
+              net.send({ type: 'createRoom', name, totalPlayers, botCount, avatar });
             }}
           >
             创建房间
@@ -220,7 +234,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
                 setError('请输入 4 位房间码');
                 return;
               }
-              net.send({ type: 'joinRoom', code: joinCode, name });
+              net.send({ type: 'joinRoom', code: joinCode, name, avatar });
             }}
           >
             加入房间

@@ -24,6 +24,7 @@ export default function ResultScreen({ state, onRestart, canRestart = true, onEx
             return (
               <div key={p.id} className={`result-player ${isWinner ? 'result-winner' : ''}`}>
                 <div className="seat-name">
+                  {p.avatar && <span className="avatar avatar-md">{p.avatar}</span>}
                   {p.name}
                   {isWinner && <span className="badge">胜者</span>}
                 </div>

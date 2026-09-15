@@ -6,6 +6,8 @@ import OnlineFlow from './components/OnlineFlow';
 export interface GameConfigUI {
   playerCount: number;
   botCount: number;
+  /** 各座位头像（本地模式仅座位 0 可设置） */
+  avatars?: string[];
 }
 
 type Screen = 'menu' | 'local' | 'online';

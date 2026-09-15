@@ -7,6 +7,8 @@ export interface RoomSeatInfo {
   id: number;
   name: string;
   isBot: boolean;
+  /** 头像（emoji 或 dataURL，本机保存随座位同步） */
+  avatar?: string;
   taken: boolean;
 }
 
@@ -33,12 +35,12 @@ export interface ClientGameView {
 }
 
 export type ClientMessage =
-  | { type: 'createRoom'; name: string; totalPlayers: number; botCount: number }
-  | { type: 'joinRoom'; code: string; name: string }
+  | { type: 'createRoom'; name: string; totalPlayers: number; botCount: number; avatar?: string }
+  | { type: 'joinRoom'; code: string; name: string; avatar?: string }
   | { type: 'startGame' }
   | { type: 'action'; action: Action }
   | { type: 'restart' }
-  | { type: 'rejoin'; code: string; playerId: number; name: string };
+  | { type: 'rejoin'; code: string; playerId: number; name: string; avatar?: string };
 
 export type ServerMessage =
   | {

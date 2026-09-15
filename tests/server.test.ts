@@ -48,6 +48,17 @@ describe('房间管理', () => {
     expect(info[0].taken).toBe(false); // 房主已连接但 ws 未设置前不算
     expect(info[2].taken).toBe(true); // 机器人
   });
+
+  it('头像：房主带头像创建，加入者头像随座位更新', () => {
+    const room = createRoom('ABCD', '小明', 3, 0, '🐱');
+    expect(room.seats[0].avatar).toBe('🐱');
+    const idx = joinRoom(room, '小红', '🦊');
+    expect(idx).toBe(1);
+    expect(room.seats[1].avatar).toBe('🦊');
+    const info = seatInfo(room);
+    expect(info[0].avatar).toBe('🐱');
+    expect(info[1].avatar).toBe('🦊');
+  });
 });
 
 describe('视角脱敏 sanitize', () => {

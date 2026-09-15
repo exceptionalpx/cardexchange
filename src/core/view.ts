@@ -11,6 +11,7 @@ export interface ViewPlayer {
   id: number;
   name: string;
   isBot: boolean;
+  avatar?: string;
   slots: ViewSlot[];
 }
 
@@ -27,6 +28,7 @@ export function buildView(state: GameState, viewerId: number): PlayerView {
       id: p.id,
       name: p.name,
       isBot: p.isBot,
+      avatar: p.avatar,
       slots: p.handSlots.map((c) =>
         c ? { card: c, known: c.id in viewer.knowledge } : { card: null, known: true },
       ),

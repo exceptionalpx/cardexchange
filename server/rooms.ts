@@ -10,6 +10,8 @@ export interface Seat {
   id: number;
   name: string;
   isBot: boolean;
+  /** 头像：内置 emoji 或 dataURL */
+  avatar?: string;
   ws: WebSocket | null;
 }
 
@@ -33,26 +35,40 @@ export function genCode(exists: (code: string) => boolean): string {
   return code;
 }
 
-export function createRoom(code: string, name: string, totalPlayers: number, botCount: number): Room {
+export function createRoom(
+  code: string,
+  name: string,
+  totalPlayers: number,
+  botCount: number,
+  avatar?: string,
+): Room {
   const seats: Seat[] = [];
   for (let i = 0; i < totalPlayers; i++) {
     const isBot = i >= totalPlayers - botCount;
     seats.push({ id: i, name: isBot ? `机器人${i + 1}` : `玩家${i + 1}`, isBot, ws: null });
   }
   seats[0].name = name;
+  seats[0].avatar = avatar;
   return { code, seats, totalPlayers, botCount, hostId: 0, state: null, timers: new Set() };
 }
 
 /** 找一个真人空位加入（房主座位 0 保留），返回座位号；房间已满返回 null */
-export function joinRoom(room: Room, name: string): number | null {
+export function joinRoom(room: Room, name: string, avatar?: string): number | null {
   const idx = room.seats.findIndex((s) => s.id !== room.hostId && !s.isBot && !s.ws);
   if (idx < 0) return null;
   room.seats[idx].name = name;
+  room.seats[idx].avatar = avatar;
   return idx;
 }
 
 export function seatInfo(room: Room): RoomSeatInfo[] {
-  return room.seats.map((s) => ({ id: s.id, name: s.name, isBot: s.isBot, taken: s.isBot || !!s.ws }));
+  return room.seats.map((s) => ({
+    id: s.id,
+    name: s.name,
+    isBot: s.isBot,
+    avatar: s.avatar,
+    taken: s.isBot || !!s.ws,
+  }));
 }
 
 export function canStart(room: Room): boolean {
@@ -167,6 +183,7 @@ export function startGame(room: Room): void {
     playerCount: room.totalPlayers,
     botCount: room.botCount,
     playerNames: room.seats.map((s) => s.name),
+    avatars: room.seats.map((s) => s.avatar),
   });
   schedule(room);
   broadcastView(room);
@@ -178,6 +195,7 @@ export function restartGame(room: Room): void {
     playerCount: room.totalPlayers,
     botCount: room.botCount,
     playerNames: room.seats.map((s) => s.name),
+    avatars: room.seats.map((s) => s.avatar),
   });
   schedule(room);
   broadcastView(room);

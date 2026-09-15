@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { applyAction, canApply, createGame, settle } from '../src/core/engine';
 import { scoreOf } from '../src/core/score';
 import type { Card, GameState } from '../src/core/types';
-
 function card(rank: Card['rank'], suit: Card['suit'] = 'spades'): Card {
   const prefix: Record<string, string> = {
     spades: 's',
@@ -607,5 +606,14 @@ describe('状态守恒', () => {
       }
       expect(countCards(s)).toBe(54);
     }
+  });
+});
+
+describe('头像配置', () => {
+  it('createGame 按座位写入头像，未设置的座位为空', () => {
+    const s = createGame({ playerCount: 3, botCount: 2, avatars: ['🐱', undefined, undefined] });
+    expect(s.players[0].avatar).toBe('🐱');
+    expect(s.players[1].avatar).toBeUndefined();
+    expect(s.players[2].avatar).toBeUndefined();
   });
 });

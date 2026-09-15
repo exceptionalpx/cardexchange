@@ -34,6 +34,8 @@ export interface PlayerState {
   id: number;
   name: string;
   isBot: boolean;
+  /** 头像：内置 emoji 或上传头像的 dataURL（本机保存，联机随座位同步） */
+  avatar?: string;
   /** 固定槽位，null 表示空；惩罚补牌在满槽时追加 */
   handSlots: (Card | null)[];
   /** 该玩家已确认看到的牌：cardId -> Card */
@@ -107,6 +109,8 @@ export interface GameConfig {
   /** 机器人数量，0 ~ playerCount-1（默认 1 名真人，其余为机器人） */
   botCount: number;
   playerNames?: string[];
+  /** 各座位头像（emoji 或 dataURL，可选，与座位号对齐；未设置的座位为 undefined） */
+  avatars?: (string | undefined)[];
 }
 
 // ---- 动作定义 ----

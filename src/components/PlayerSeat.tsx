@@ -24,6 +24,7 @@ export default function PlayerSeat({
   return (
     <div className={`seat ${isCurrent ? 'seat-current' : ''} ${isDeclared ? 'seat-declared' : ''}`}>
       <div className="seat-name">
+        {player.avatar && <span className="avatar avatar-sm">{player.avatar}</span>}
         {player.name}
         {isCurrent && <span className="badge">行动中</span>}
         {isDeclared && <span className="badge badge-declared">已定牌</span>}

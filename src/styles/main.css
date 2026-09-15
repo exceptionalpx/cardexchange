@@ -283,6 +283,84 @@ body {
   margin-bottom: 18px;
 }
 
+/* ---------- 头像 ---------- */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.avatar-sm {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+}
+
+.avatar-md {
+  width: 34px;
+  height: 34px;
+  font-size: 22px;
+}
+
+.avatar-preview {
+  width: 40px;
+  height: 40px;
+  font-size: 26px;
+}
+
+.avatar-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  max-width: 300px;
+}
+
+.avatar-opt {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 22px;
+  cursor: pointer;
+  transition: all 0.12s;
+  line-height: 1;
+}
+
+.avatar-opt:hover {
+  background: rgba(245, 197, 66, 0.2);
+}
+
+.avatar-opt-active {
+  border-color: #f5c542;
+  background: rgba(245, 197, 66, 0.25);
+}
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-lobby {
+  display: flex;
+  justify-content: center;
+}
+
 /* ---------- 对局 ---------- */
 .game {
   height: 100%;
