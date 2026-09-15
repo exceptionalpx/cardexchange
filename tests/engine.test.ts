@@ -45,6 +45,7 @@ function makeGame(
     lastSwap: null,
     lastMove: null,
     lastViewed: null,
+    lastPenalty: null,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -615,15 +616,62 @@ describe('状态守恒', () => {
 });
 
 describe('头像配置', () => {
-  it('createGame 每个玩家都有头像：真人自定义优先，未设置与机器人自动分配默认', () => {
+  it('真人自定义头像优先；机器人统一用 🤖；未配置真人自动分配默认', () => {
     const s = createGame({ playerCount: 3, botCount: 2, avatars: ['🐱', undefined, undefined] });
     expect(s.players[0].avatar).toBe('🐱'); // 真人自定义头像
-    expect(s.players[1].avatar).toBeTruthy(); // 机器人自动分配
-    expect(s.players[2].avatar).toBeTruthy();
-    // 完全未配置时，所有座位（含真人）都有默认头像
+    expect(s.players[1].avatar).toBe('🤖'); // 机器人统一机器人头像
+    expect(s.players[2].avatar).toBe('🤖');
+    // 完全未配置时，真人座位也有默认头像（且机器人仍是 🤖，不与玩家重复）
     const s2 = createGame({ playerCount: 2, botCount: 1 });
     expect(s2.players[0].avatar).toBeTruthy();
-    expect(s2.players[1].avatar).toBeTruthy();
+    expect(s2.players[0].avatar).not.toBe('🤖');
+    expect(s2.players[1].avatar).toBe('🤖');
+  });
+
+  it('真人头像为空字符串时兜底分配默认头像（不再空头像不显示）', () => {
+    const s = createGame({ playerCount: 2, botCount: 0, avatars: ['', undefined] });
+    expect(s.players[0].avatar).toBeTruthy();
+    expect(s.players[1].avatar).toBeTruthy();
+    expect(s.players[0].avatar).not.toBe('🤖');
+  });
+});
+
+describe('罚牌 lastPenalty', () => {
+  it('跟弃失败：惩罚补牌并记录 actor+slot（不含牌面）', () => {
+    const s = makeGame(
+      [
+        [card('A'), card('2'), card('3'), card('4')],
+        [card('9'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('9'), card('Q')], currentPlayer: 0 },
+    );
+    let g = applyAction(s, { type: 'DRAW' }); // 玩家0 摸到 9
+    g = applyAction(g, { type: 'DISCARD_DRAWN' }); // 弃 9 → 触发跟弃窗口（目标分 9，玩家1 持 9 分牌）
+    expect(g.follow).not.toBeNull();
+    // 玩家1 故意点错牌（slot 1 是 6 分，不是 9 分）→ 跟弃失败 → 罚牌
+    const before = g.players[1].handSlots.length;
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 1 });
+    expect(g.lastPenalty).not.toBeNull();
+    expect(g.lastPenalty!.actor).toBe(1);
+    expect(g.players[1].handSlots[g.lastPenalty!.slot]).not.toBeNull();
+    expect(g.players[1].handSlots.length).toBe(before + 1);
+    expect(g.discardPile).toContainEqual(card('9'));
+  });
+
+  it('牌堆已空时跟弃失败：不写 lastPenalty（无牌可补）', () => {
+    const s = makeGame(
+      [
+        [card('A'), card('2'), card('3'), card('4')],
+        [card('9'), card('6'), card('7'), card('8')],
+      ],
+      { deck: [card('9')], currentPlayer: 0 },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'DISCARD_DRAWN' });
+    expect(g.lastPenalty).toBeNull();
+    g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 1 });
+    expect(g.lastPenalty).toBeNull();
+    expect(g.players[1].handSlots.length).toBe(4); // 没有多牌
   });
 });
 

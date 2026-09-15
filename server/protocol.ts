@@ -31,6 +31,7 @@ export interface ClientGameView {
   lastSwap: GameState['lastSwap'];
   lastMove: GameState['lastMove'];
   lastViewed: GameState['lastViewed'];
+  lastPenalty: GameState['lastPenalty'];
   finalRemaining: number;
   winner: number[] | null;
   log: LogEntry[];

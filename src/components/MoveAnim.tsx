@@ -1,13 +1,14 @@
-// 弃牌 / 替换动画：
+// 弃牌 / 替换 / 罚牌动画：
 // - 弃牌：一张牌（真实牌面，弃牌会公开进弃牌堆）从弃牌者座位飞向弃牌堆（简单飞行）
 // - 替换：猫爪抓住新牌（背面，进手牌保密）从座位飞进目标槽位；被替换旧牌（真实牌面，进弃牌堆）弹起飞向弃牌堆
-// 一次性播放，播完自动清理。
+// - 罚牌：一张背面牌从牌堆飞入被罚玩家槽位，落位后槽位短暂高亮"罚牌"
+// 内容级防重：联机广播会重建对象引用，只有内容真正变化才播一次，避免动画重复。
 import { useEffect, useRef, useState } from 'react';
 import type { Card, GameState } from '../core/types';
 import PawSvg from './Paw';
 import CardView from './CardView';
 
-const DURATION = 1400;
+const DURATION = 1500;
 
 interface Rect {
   x: number;
@@ -17,25 +18,40 @@ interface Rect {
 }
 
 interface Plan {
-  kind: 'discard' | 'replace';
+  kind: 'discard' | 'replace' | 'penalty';
   /** 弃牌者座位中心（起点） */
   seat: Rect;
   /** 弃牌堆位置 */
   discard: Rect;
-  /** replace：目标槽位 */
+  /** replace：目标槽位；penalty：被罚槽位 */
   slot?: Rect;
-  /** 飞行卡真实牌面（弃的牌 / 被替换旧牌，均公开进弃牌堆） */
-  card: Card;
+  /** 飞行卡真实牌面（弃的牌 / 被替换旧牌，均公开进弃牌堆）；penalty 无牌面用背面 */
+  card?: Card;
+  /** penalty：被罚玩家与槽位（落位后高亮用） */
+  targetPlayer?: number;
+  targetSlot?: number;
 }
 
-export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove'] }) {
+interface Props {
+  lastMove: GameState['lastMove'];
+  lastPenalty: GameState['lastPenalty'];
+}
+
+export default function MoveAnim({ lastMove, lastPenalty }: Props) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const pawRef = useRef<HTMLDivElement>(null);
   const oldRef = useRef<HTMLDivElement>(null);
   const flyRef = useRef<HTMLDivElement>(null);
+  const moveSigRef = useRef('');
+  const penaltySigRef = useRef('');
 
+  // 弃牌 / 替换：内容签名防重（联机广播引用常变，内容相同不重播）
   useEffect(() => {
     if (!lastMove) return;
+    const sig = JSON.stringify(lastMove);
+    if (sig === moveSigRef.current) return;
+    moveSigRef.current = sig;
+
     const seatEl = document.querySelector(`[data-player="${lastMove.actor}"]`);
     if (!(seatEl instanceof HTMLElement)) return;
     const sr = seatEl.getBoundingClientRect();
@@ -61,6 +77,33 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
     return () => clearTimeout(t);
   }, [lastMove]);
 
+  // 罚牌：背面牌从牌堆飞入槽位，落位后槽位高亮
+  useEffect(() => {
+    if (!lastPenalty) return;
+    const sig = JSON.stringify(lastPenalty);
+    if (sig === penaltySigRef.current) return;
+    penaltySigRef.current = sig;
+
+    const deckEl = document.querySelector('.deck-stub');
+    if (!(deckEl instanceof HTMLElement)) return;
+    const dr = deckEl.getBoundingClientRect();
+    const slotEl = document.querySelector(
+      `[data-player="${lastPenalty.actor}"][data-slot="${lastPenalty.slot}"] .card`,
+    );
+    if (!(slotEl instanceof HTMLElement)) return;
+    const sl = slotEl.getBoundingClientRect();
+    setPlan({
+      kind: 'penalty',
+      seat: { x: dr.left + dr.width / 2 - 20, y: dr.top + dr.height / 2 - 28, w: 40, h: 56 },
+      discard: { x: sl.left, y: sl.top, w: sl.width, h: sl.height },
+      slot: { x: sl.left, y: sl.top, w: sl.width, h: sl.height },
+      targetPlayer: lastPenalty.actor,
+      targetSlot: lastPenalty.slot,
+    });
+    const t = setTimeout(() => setPlan(null), DURATION);
+    return () => clearTimeout(t);
+  }, [lastPenalty]);
+
   // 播放动画
   useEffect(() => {
     if (!plan) return;
@@ -77,6 +120,31 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
         ],
         { duration: 850, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
       );
+      return;
+    }
+    if (plan.kind === 'penalty') {
+      const fly = flyRef.current;
+      if (!fly) return;
+      const dx = plan.discard.x - plan.seat.x;
+      const dy = plan.discard.y - plan.seat.y;
+      fly.animate(
+        [
+          { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+          { transform: `translate(${dx / 2}px, ${dy / 2 - 60}px) scale(1.05)`, offset: 0.5, opacity: 1 },
+          { transform: `translate(${dx}px, ${dy}px) scale(0.95)`, offset: 1, opacity: 1 },
+        ],
+        { duration: 800, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
+      );
+      // 落位后槽位短暂高亮"罚牌"
+      if (plan.targetPlayer !== undefined && plan.targetSlot !== undefined) {
+        const slotCard = document.querySelector(
+          `[data-player="${plan.targetPlayer}"][data-slot="${plan.targetSlot}"] .card`,
+        );
+        if (slotCard instanceof HTMLElement) {
+          slotCard.classList.add('penalty-flash');
+          setTimeout(() => slotCard.classList.remove('penalty-flash'), 1300);
+        }
+      }
       return;
     }
     // replace：猫爪送新牌（背面）进槽位 + 旧牌弹出到弃牌堆
@@ -117,8 +185,22 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
           style={{ left: plan.seat.x, top: plan.seat.y, width: plan.seat.w, height: plan.seat.h }}
         >
           <div className="swap-fly-card card">
-            <CardView card={plan.card} known />
+            <CardView card={plan.card!} known />
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (plan.kind === 'penalty') {
+    return (
+      <div className="swap-anim-layer" aria-hidden>
+        <div
+          ref={flyRef}
+          className="swap-fly"
+          style={{ left: plan.seat.x, top: plan.seat.y, width: plan.seat.w, height: plan.seat.h }}
+        >
+          <div className="swap-fly-card card card-back">?</div>
         </div>
       </div>
     );
@@ -142,7 +224,7 @@ export default function MoveAnim({ lastMove }: { lastMove: GameState['lastMove']
         style={{ left: plan.slot?.x, top: plan.slot?.y, width: plan.slot?.w, height: plan.slot?.h }}
       >
         <div className="swap-fly-card card">
-          <CardView card={plan.card} known />
+          <CardView card={plan.card!} known />
         </div>
       </div>
     </div>

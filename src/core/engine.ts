@@ -43,10 +43,13 @@ function addKnowledge(p: PlayerState, card: Card): PlayerState {
   return { ...p, knowledge: { ...p.knowledge, [card.id]: card } };
 }
 
-/** 盲摸一张惩罚牌：空槽优先，满槽追加；牌堆空则无牌可补 */
-function addPenaltyCard(p: PlayerState, deck: Card[]): { player: PlayerState; deck: Card[]; got: Card | null } {
+/** 盲摸一张惩罚牌：空槽优先，满槽追加；牌堆空则无牌可补；返回落位 slot（未补到为 -1） */
+function addPenaltyCard(
+  p: PlayerState,
+  deck: Card[],
+): { player: PlayerState; deck: Card[]; got: Card | null; slot: number } {
   const [card, rest] = drawCard(deck);
-  if (!card) return { player: p, deck: rest, got: null };
+  if (!card) return { player: p, deck: rest, got: null, slot: -1 };
   const slots = [...p.handSlots];
   const idx = slots.findIndex((s) => s === null);
   if (idx >= 0) {
@@ -54,7 +57,7 @@ function addPenaltyCard(p: PlayerState, deck: Card[]): { player: PlayerState; de
   } else {
     slots.push(card);
   }
-  return { player: { ...p, handSlots: slots }, deck: rest, got: card };
+  return { player: { ...p, handSlots: slots }, deck: rest, got: card, slot: idx >= 0 ? idx : slots.length - 1 };
 }
 
 /** 玩家是否持有指定分数的牌 */
@@ -80,8 +83,8 @@ function cardLabel(card: Card): string {
 
 // ---------- 初始化 ----------
 
-/** 机器人默认头像（对局中按座位自动分配，保证每位玩家都有头像） */
-const BOT_AVATARS = ['🐯', '🦁', '🐼', '🐨', '🦊', '🐸', '🐧', '🐰', '🐶', '🐱', '🦄', '🐻'];
+/** 真人玩家默认头像池（未选择/未配置时按座位自动取，保证对局中每人都有头像） */
+const PLAYER_AVATARS = ['🐯', '🦁', '🐼', '🐨', '🦊', '🐸', '🐧', '🐰', '🐶', '🐱', '🦄', '🐻'];
 
 export function createGame(config: GameConfig, rng: () => number = Math.random): GameState {
   const count = Math.min(4, Math.max(2, config.playerCount));
@@ -92,8 +95,9 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
   for (let i = 0; i < count; i++) {
     const isBot = i >= count - botCount; // 真人玩家优先为前几位
     const name = config.playerNames?.[i] ?? (isBot ? `机器人${i + 1}` : `玩家${i + 1}`);
-    // 所有玩家默认分配头像（未选择/未配置时按座位自动取默认），保证对局中每人都有头像
-    const avatar = config.avatars?.[i] ?? BOT_AVATARS[i % BOT_AVATARS.length];
+    // 头像：机器人统一用机器人头像；真人优先用自己选的，空串/未配置从真人默认池按座位分配
+    const chosen = (config.avatars?.[i] || '').trim();
+    const avatar = isBot ? '🤖' : chosen || PLAYER_AVATARS[i % PLAYER_AVATARS.length];
     const handSlots: (Card | null)[] = deck.slice(i * 4, i * 4 + 4);
     players.push({ id: i, name, isBot, avatar, handSlots, knowledge: {} });
   }
@@ -113,6 +117,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     lastSwap: null,
     lastMove: null,
     lastViewed: null,
+    lastPenalty: null,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -344,7 +349,7 @@ function useAbility(state: GameState): GameState {
   const card = pend.card;
   const rank = card.rank as string;
 
-  // 功能牌进入功能区（功能消耗，不触发跟弃窗口；不混入弃牌堆）
+  // 功能牌进入已使用功能牌区（功能消耗，不触发跟弃窗口；不混入弃牌堆）
   const base: GameState = {
     ...state,
     usedPile: [...state.usedPile, card],
@@ -600,6 +605,8 @@ function tryFollow(state: GameState, playerId: number, slot: number): GameState 
     players,
     deck: res.deck,
     follow: follow && decisions ? { ...follow, decisions } : state.follow,
+    // 罚牌动画数据：只记罚给谁、落在哪个槽（牌面保密）
+    lastPenalty: res.got ? { actor: playerId, slot: res.slot } : state.lastPenalty,
     log: [
       ...state.log,
       log(

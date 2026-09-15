@@ -40,6 +40,7 @@ function makeState(hands: Card[][]): GameState {
     lastSwap: null,
     lastMove: null,
     lastViewed: null,
+    lastPenalty: null,
     finalRemaining: 0,
     winner: null,
     log: [],

@@ -320,7 +320,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
         </div>
 
         <SwapAnim lastSwap={state.lastSwap} />
-        <MoveAnim lastMove={state.lastMove} />
+        <MoveAnim lastMove={state.lastMove} lastPenalty={state.lastPenalty} />
         <PeekAnim lastViewed={state.lastViewed} />
 
         <ActionPanel

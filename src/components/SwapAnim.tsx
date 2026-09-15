@@ -26,9 +26,14 @@ export default function SwapAnim({ lastSwap }: { lastSwap: GameState['lastSwap']
   const [plan, setPlan] = useState<AnimPlan | null>(null);
   const pawRef = useRef<HTMLDivElement>(null);
   const otherRef = useRef<HTMLDivElement>(null);
+  const sigRef = useRef('');
 
   useEffect(() => {
     if (!lastSwap) return;
+    // 内容级防重：联机广播引用常变，内容相同不重播
+    const sig = JSON.stringify(lastSwap);
+    if (sig === sigRef.current) return;
+    sigRef.current = sig;
     const selfCard = document.querySelector(
       `[data-player="${lastSwap.selfPlayer}"][data-slot="${lastSwap.selfSlot}"] .card`,
     );

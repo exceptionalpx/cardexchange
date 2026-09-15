@@ -81,7 +81,7 @@ export interface LogEntry {
 export interface GameState {
   deck: Card[];
   discardPile: Card[];
-  /** 发动过功能的牌（7/8/9/10/J/Q/K 用掉后进入功能区，不混入弃牌堆） */
+  /** 发动过功能的牌（7/8/9/10/J/Q/K 用掉后进入已使用功能牌区，不混入弃牌堆） */
   usedPile: Card[];
   players: PlayerState[];
   currentPlayer: number;
@@ -106,6 +106,8 @@ export interface GameState {
     | null;
   /** 最近一次"看牌"动作（9/10 看他人 / K 明换查看对方），目标牌被拿起放下提示动画；不含牌面 */
   lastViewed: { actor: number; targetPlayer: number; targetSlot: number } | null;
+  /** 最近一次跟弃失败的惩罚补牌（牌从牌堆飞入被罚玩家槽位，背面飞行，不含牌面） */
+  lastPenalty: { actor: number; slot: number } | null;
   /** 定牌后剩余待操作轮次（不含定牌玩家） */
   finalRemaining: number;
   winner: number[] | null;
