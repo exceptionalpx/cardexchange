@@ -81,6 +81,8 @@ export interface LogEntry {
 export interface GameState {
   deck: Card[];
   discardPile: Card[];
+  /** 发动过功能的牌（7/8/9/10/J/Q/K 用掉后进入功能区，不混入弃牌堆） */
+  usedPile: Card[];
   players: PlayerState[];
   currentPlayer: number;
   phase: Phase;
@@ -97,6 +99,11 @@ export interface GameState {
     otherPlayer: number;
     otherSlot: number;
   } | null;
+  /** 最近一次弃牌/替换动作（动画数据，只含公开位置信息，不含牌面，避免信息泄露） */
+  lastMove:
+    | { kind: 'discard'; actor: number } // 摸到的牌弃掉：座位 → 弃牌堆
+    | { kind: 'replace'; actor: number; slot: number } // 替换：新牌（背面）座位 → 槽位；旧牌（正面）槽位 → 弃牌堆
+    | null;
   /** 定牌后剩余待操作轮次（不含定牌玩家） */
   finalRemaining: number;
   winner: number[] | null;

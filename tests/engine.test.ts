@@ -34,6 +34,7 @@ function makeGame(
   return {
     deck: opts.deck ?? [],
     discardPile: opts.discardPile ?? [],
+    usedPile: [],
     players,
     currentPlayer: opts.currentPlayer ?? 0,
     phase: opts.phase ?? 'playing',
@@ -42,15 +43,16 @@ function makeGame(
     follow: null,
     pending: opts.pending ?? null,
     lastSwap: null,
+    lastMove: null,
     finalRemaining: 0,
     winner: null,
     log: [],
   };
 }
 
-/** 全局牌数守恒：牌堆 + 弃牌堆 + 手牌 + 悬空 pending = 54 */
+/** 全局牌数守恒：牌堆 + 弃牌堆 + 功能区 + 手牌 + 悬空 pending = 54 */
 function countCards(s: GameState): number {
-  let n = s.deck.length + s.discardPile.length;
+  let n = s.deck.length + s.discardPile.length + s.usedPile.length;
   for (const p of s.players) n += p.handSlots.filter((c) => c !== null).length;
   if (s.pending?.kind === 'drawn') n += 1;
   return n;
@@ -202,7 +204,9 @@ describe('功能牌', () => {
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'USE_ABILITY' });
     expect(g.pending?.kind).toBe('chooseSelfSlot');
-    expect(g.discardPile).toContainEqual(card('7'));
+    // 功能牌进入功能区，不混入弃牌堆
+    expect(g.usedPile).toContainEqual(card('7'));
+    expect(g.discardPile).not.toContainEqual(card('7'));
     g = applyAction(g, { type: 'PICK_SELF_SLOT', slot: 1 });
     expect(g.players[0].knowledge[card('K').id]).toEqual(card('K'));
     expect(g.pending?.kind).toBe('revealDone');
@@ -610,10 +614,29 @@ describe('状态守恒', () => {
 });
 
 describe('头像配置', () => {
-  it('createGame 按座位写入头像，未设置的座位为空', () => {
+  it('createGame 按座位写入头像，机器人自动分配默认头像', () => {
     const s = createGame({ playerCount: 3, botCount: 2, avatars: ['🐱', undefined, undefined] });
-    expect(s.players[0].avatar).toBe('🐱');
-    expect(s.players[1].avatar).toBeUndefined();
-    expect(s.players[2].avatar).toBeUndefined();
+    expect(s.players[0].avatar).toBe('🐱'); // 真人用自定义
+    expect(s.players[1].avatar).toBeTruthy(); // 机器人自动分配
+    expect(s.players[2].avatar).toBeTruthy();
+  });
+});
+
+describe('lastMove 动画数据', () => {
+  it('直接弃牌：写入 discard 动画数据（含操作者，不含牌面）', () => {
+    const s = makeGame([[card('A'), card('2'), card('3'), card('4')]], { deck: [card('9')] });
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'DISCARD_DRAWN' });
+    expect(g.lastMove).toEqual({ kind: 'discard', actor: 0 });
+  });
+
+  it('替换手牌：写入 replace 动画数据（含槽位与操作者）', () => {
+    const s = makeGame([[card('A'), card('2'), card('3'), card('4')]], { deck: [card('9')] });
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'REPLACE', slot: 2 });
+    expect(g.lastMove).toEqual({ kind: 'replace', actor: 0, slot: 2 });
+    // 被替换的旧牌进弃牌堆，新牌进槽位
+    expect(g.players[0].handSlots[2]).toEqual(card('9'));
+    expect(g.discardPile).toContainEqual(card('3'));
   });
 });

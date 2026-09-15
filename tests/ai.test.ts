@@ -29,6 +29,7 @@ function makeState(hands: Card[][]): GameState {
   return {
     deck: [card('A'), card('5'), card('A'), card('5'), card('A')],
     discardPile: [],
+    usedPile: [],
     players,
     currentPlayer: 0,
     phase: 'playing' as const,
@@ -37,6 +38,7 @@ function makeState(hands: Card[][]): GameState {
     follow: null,
     pending: null,
     lastSwap: null,
+    lastMove: null,
     finalRemaining: 0,
     winner: null,
     log: [],

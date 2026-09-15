@@ -19,6 +19,8 @@ export interface ClientGameView {
   deckCount: number;
   /** 弃牌堆（公开） */
   discardPile: Card[];
+  /** 功能区：发动过功能的牌（公开） */
+  usedPile: Card[];
   /** 玩家状态（knowledge 已清空，牌面由 view 槽位 + pending 控制） */
   players: PlayerState[];
   currentPlayer: number;
@@ -27,6 +29,7 @@ export interface ClientGameView {
   /** 挂起交互：牌面字段仅对有权查看的玩家可见，其余为 undefined */
   pending: PendingAction | null;
   lastSwap: GameState['lastSwap'];
+  lastMove: GameState['lastMove'];
   finalRemaining: number;
   winner: number[] | null;
   log: LogEntry[];

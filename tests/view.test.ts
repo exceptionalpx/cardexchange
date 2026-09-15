@@ -30,6 +30,7 @@ function makeState(hands: Card[][], viewerKnowledge: Card[], otherKnowledge: Car
   return {
     deck: [],
     discardPile: [],
+    usedPile: [],
     players,
     currentPlayer: 0,
     phase: 'playing' as const,
@@ -38,6 +39,7 @@ function makeState(hands: Card[][], viewerKnowledge: Card[], otherKnowledge: Car
     follow: null,
     pending: null,
     lastSwap: null,
+    lastMove: null,
     finalRemaining: 0,
     winner: null,
     log: [],

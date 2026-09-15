@@ -14,7 +14,7 @@ function makeRng(seed: number): () => number {
 }
 
 function countCards(state: GameState): number {
-  let n = state.deck.length + state.discardPile.length;
+  let n = state.deck.length + state.discardPile.length + state.usedPile.length;
   for (const p of state.players) n += p.handSlots.filter((c) => c !== null).length;
   if (state.pending?.kind === 'drawn') n += 1;
   return n;

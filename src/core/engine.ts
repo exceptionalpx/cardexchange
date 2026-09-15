@@ -80,6 +80,9 @@ function cardLabel(card: Card): string {
 
 // ---------- 初始化 ----------
 
+/** 机器人默认头像（对局中按座位自动分配，保证每位玩家都有头像） */
+const BOT_AVATARS = ['🐯', '🦁', '🐼', '🐨', '🦊', '🐸', '🐧', '🐰', '🐶', '🐱', '🦄', '🐻'];
+
 export function createGame(config: GameConfig, rng: () => number = Math.random): GameState {
   const count = Math.min(4, Math.max(2, config.playerCount));
   const botCount = Math.min(count - 1, Math.max(0, config.botCount));
@@ -89,7 +92,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
   for (let i = 0; i < count; i++) {
     const isBot = i >= count - botCount; // 真人玩家优先为前几位
     const name = config.playerNames?.[i] ?? (isBot ? `机器人${i + 1}` : `玩家${i + 1}`);
-    const avatar = config.avatars?.[i];
+    const avatar = config.avatars?.[i] ?? (isBot ? BOT_AVATARS[i % BOT_AVATARS.length] : undefined);
     const handSlots: (Card | null)[] = deck.slice(i * 4, i * 4 + 4);
     players.push({ id: i, name, isBot, avatar, handSlots, knowledge: {} });
   }
@@ -98,6 +101,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
   return {
     deck: remainingDeck,
     discardPile: [],
+    usedPile: [],
     players,
     currentPlayer: 0,
     phase: 'deal',
@@ -106,6 +110,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     follow: null,
     pending: null,
     lastSwap: null,
+    lastMove: null,
     finalRemaining: 0,
     winner: null,
     log: [],
@@ -287,7 +292,10 @@ function discardDrawn(state: GameState): GameState {
   if (pend?.kind !== 'drawn') return state;
   const card = pend.card;
   const discardPile = [...state.discardPile, card];
-  return afterDiscard({ ...state, pending: null, discardPile, lastDiscard: card }, card);
+  return afterDiscard(
+    { ...state, pending: null, discardPile, lastDiscard: card, lastMove: { kind: 'discard', actor: state.currentPlayer } },
+    card,
+  );
 }
 
 // ---- 替换手牌槽位 ----
@@ -314,6 +322,7 @@ function replace(state: GameState, slot: number): GameState {
       pending: null,
       discardPile,
       lastDiscard: replaced,
+      lastMove: { kind: 'replace', actor: state.currentPlayer, slot },
     },
     replaced,
   );
@@ -327,10 +336,10 @@ function useAbility(state: GameState): GameState {
   const card = pend.card;
   const rank = card.rank as string;
 
-  // 功能牌进入弃牌堆（功能消耗，不触发跟弃窗口）
+  // 功能牌进入功能区（功能消耗，不触发跟弃窗口；不混入弃牌堆）
   const base: GameState = {
     ...state,
-    discardPile: [...state.discardPile, card],
+    usedPile: [...state.usedPile, card],
     pending: null,
   };
 

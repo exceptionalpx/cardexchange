@@ -119,6 +119,9 @@ describe('视角脱敏 sanitize', () => {
     expect(v0.deckCount).toBe(g.deck.length);
     expect(v0.players[0].knowledge).toEqual({});
     expect(v0.players[1].knowledge).toEqual({});
+    // 功能区 / 动画数据透传（公开信息）
+    expect(v0.usedPile).toEqual(g.usedPile);
+    expect(v0.lastMove).toEqual(g.lastMove);
     // 玩家 0 自己视角：槽位可见自己的牌
     expect(v0.view.players[0].slots[0].known).toBe(true);
     // pending 牌面：玩家 0 是当前玩家 → 可见
