@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
 import { buildClientView, sanitizePending } from '../server/sanitize';
-import { canStart, createRoom, genCode, joinRoom, seatInfo } from '../server/rooms';
+import { canStart, createRoom, genCode, joinRoom, roomLiteInfo, seatInfo } from '../server/rooms';
 
 function toState(s: unknown): GameState {
   return s as GameState;
@@ -58,6 +58,17 @@ describe('房间管理', () => {
     const info = seatInfo(room);
     expect(info[0].avatar).toBe('🐱');
     expect(info[1].avatar).toBe('🦊');
+  });
+
+  it('房间摘要：公开可加入信息，不泄露座位明细', () => {
+    const room = createRoom('ABCD', '小明', 3, 1);
+    room.seats[0].ws = {} as never;
+    const lite = roomLiteInfo(room);
+    expect(lite.code).toBe('ABCD');
+    expect(lite.hostName).toBe('小明');
+    expect(lite.humanTotal).toBe(2); // 3 人 - 1 机器人
+    expect(lite.humanFilled).toBe(1); // 房主已连接
+    expect(lite.inGame).toBe(false);
   });
 });
 

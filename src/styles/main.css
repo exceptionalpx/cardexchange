@@ -361,6 +361,71 @@ body {
   justify-content: center;
 }
 
+/* ---------- 开放房间列表 ---------- */
+.room-list-section {
+  width: 100%;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  padding-top: 14px;
+}
+
+.room-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 260px;
+  max-width: 84vw;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.room-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-light);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-align: left;
+}
+
+.room-item:hover:not(:disabled) {
+  background: rgba(245, 197, 66, 0.18);
+  border-color: #f5c542;
+}
+
+.room-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.room-item-host {
+  font-weight: 700;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-item-code {
+  font-family: monospace;
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
 /* ---------- 对局 ---------- */
 .game {
   height: 100%;

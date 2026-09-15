@@ -71,6 +71,28 @@ export function seatInfo(room: Room): RoomSeatInfo[] {
   }));
 }
 
+/** 大厅展示用的房间摘要（不含任何牌面/座位明细） */
+export interface RoomLite {
+  code: string;
+  hostName: string;
+  /** 已加入的真人人数 */
+  humanFilled: number;
+  /** 真人位总数 */
+  humanTotal: number;
+  inGame: boolean;
+}
+
+export function roomLiteInfo(room: Room): RoomLite {
+  const humans = room.seats.filter((s) => !s.isBot);
+  return {
+    code: room.code,
+    hostName: room.seats[0]?.name ?? '',
+    humanFilled: humans.filter((s) => !!s.ws).length,
+    humanTotal: humans.length,
+    inGame: !!room.state,
+  };
+}
+
 export function canStart(room: Room): boolean {
   return room.state === null && room.seats.every((s) => s.isBot || !!s.ws);
 }

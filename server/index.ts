@@ -17,6 +17,7 @@ import {
   joinRoom,
   restartGame,
   Room,
+  roomLiteInfo,
   seatInfo,
   startGame,
 } from './rooms';
@@ -70,6 +71,13 @@ async function serveStatic(req: import('http').IncomingMessage, res: import('htt
 }
 
 const httpServer = createServer((req, res) => {
+  // 开放房间列表（大厅轮询，公开可加入信息，不含牌面/座位明细）
+  if (req.url?.startsWith('/api/rooms')) {
+    const list = Array.from(rooms.values()).map(roomLiteInfo);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ rooms: list }));
+    return;
+  }
   void serveStatic(req, res);
 });
 

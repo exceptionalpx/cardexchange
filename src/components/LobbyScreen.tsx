@@ -1,9 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Net } from '../net/socket';
 import type { RoomSeatInfo } from '../../server/protocol';
 import AvatarPicker, { loadAvatar, AVATAR_KEY } from './AvatarPicker';
 
 export const ONLINE_KEY = 'cardexchange-online';
+
+/** GET /api/rooms 返回的开放房间摘要 */
+interface OpenRoom {
+  code: string;
+  hostName: string;
+  humanFilled: number;
+  humanTotal: number;
+  inGame: boolean;
+}
 
 interface RoomView {
   code: string;
@@ -29,6 +38,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   const [joinCode, setJoinCode] = useState('');
   const [room, setRoom] = useState<RoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openRooms, setOpenRooms] = useState<OpenRoom[]>([]);
   const nameRef = useRef(name);
   nameRef.current = name;
   const avatarRef = useRef(avatar);
@@ -39,6 +49,21 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
     setAvatar(v);
     localStorage.setItem(AVATAR_KEY, v);
   }
+
+  // ---- 开放房间列表：进入大厅拉取 + 每 5 秒轮询 + 手动刷新 ----
+  const loadRooms = useCallback(() => {
+    fetch('/api/rooms')
+      .then((r) => r.json())
+      .then((data: { rooms: OpenRoom[] }) => setOpenRooms(data.rooms ?? []))
+      .catch(() => setOpenRooms([]));
+  }, []);
+
+  useEffect(() => {
+    if (room) return; // 已进房间不再轮询
+    loadRooms();
+    const t = setInterval(loadRooms, 5000);
+    return () => clearInterval(t);
+  }, [room, loadRooms]);
 
   useEffect(() => {
     const off = net.onMessage((msg) => {
@@ -239,6 +264,45 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
           >
             加入房间
           </button>
+
+          <div className="menu-section room-list-section">
+            <div className="room-list-head">
+              <label>开放房间</label>
+              <button className="btn btn-small" onClick={loadRooms}>
+                刷新
+              </button>
+            </div>
+            {openRooms.length === 0 ? (
+              <p className="hint">暂无开放房间，创建一个吧</p>
+            ) : (
+              <div className="room-list">
+                {openRooms.map((r) => {
+                  const full = r.humanFilled >= r.humanTotal || r.inGame;
+                  return (
+                    <button
+                      key={r.code}
+                      className={`room-item ${full ? 'room-item-disabled' : ''}`}
+                      disabled={full}
+                      onClick={() => {
+                        if (!name.trim()) {
+                          setError('请先输入昵称');
+                          return;
+                        }
+                        net.send({ type: 'joinRoom', code: r.code, name, avatar });
+                      }}
+                    >
+                      <span className="room-item-host">{r.hostName}</span>
+                      <span>
+                        人数 {r.humanFilled}/{r.humanTotal}
+                      </span>
+                      <span className="badge">{r.inGame ? '对局中' : full ? '已满' : '可加入'}</span>
+                      <span className="room-item-code">{r.code}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
