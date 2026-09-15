@@ -96,7 +96,7 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
     return (
       <div className="menu lobby">
         <h1 className="menu-title">房间 {room.code}</h1>
-        <p className="menu-sub">把房间码告诉朋友，同一网络下即可加入</p>
+        <p className="menu-sub">把房间码告诉朋友，随时随地即可加入</p>
 
         <div className="room-seats">
           {room.seats.map((s) => (
@@ -185,8 +185,13 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
           </div>
           <button
             className="btn btn-big btn-primary"
-            disabled={!name.trim()}
-            onClick={() => net.send({ type: 'createRoom', name, totalPlayers, botCount })}
+            onClick={() => {
+              if (!name.trim()) {
+                setError('请先输入昵称');
+                return;
+              }
+              net.send({ type: 'createRoom', name, totalPlayers, botCount });
+            }}
           >
             创建房间
           </button>
@@ -206,8 +211,17 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
           </div>
           <button
             className="btn btn-big"
-            disabled={!name.trim() || joinCode.length !== 4}
-            onClick={() => net.send({ type: 'joinRoom', code: joinCode, name })}
+            onClick={() => {
+              if (!name.trim()) {
+                setError('请先输入昵称');
+                return;
+              }
+              if (joinCode.trim().length !== 4) {
+                setError('请输入 4 位房间码');
+                return;
+              }
+              net.send({ type: 'joinRoom', code: joinCode, name });
+            }}
           >
             加入房间
           </button>
