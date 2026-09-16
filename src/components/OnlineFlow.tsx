@@ -1,4 +1,4 @@
-// 联机流程：连接管理 → 大厅 → 牌桌（服务器权威视图驱动）
+// 联机流程：连接管理 → 主页大厅 → 房间 → 牌桌（服务器权威视图驱动）
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Net } from '../net/socket';
 import type { Action } from '../core/types';
@@ -8,7 +8,10 @@ import GameScreen from './GameScreen';
 import { loadAvatar } from './AvatarPicker';
 
 interface Props {
-  onExit: () => void;
+  /** 切到本地模式（热座配置页） */
+  onLocal: () => void;
+  /** 直接开始引导局（固定剧本 + 新手机器人） */
+  onGuided: () => void;
 }
 
 interface SavedSession {
@@ -16,13 +19,14 @@ interface SavedSession {
   playerId: number;
   name: string;
 }
-export default function OnlineFlow({ onExit }: Props) {
+export default function OnlineFlow({ onLocal, onGuided }: Props) {
   const netRef = useRef<Net | null>(null);
   const [net, setNet] = useState<Net | null>(null);
   const [inGame, setInGame] = useState(false);
   const [view, setView] = useState<ClientGameView | null>(null);
   const [hostId, setHostId] = useState(-1);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [emojiEvent, setEmojiEvent] = useState<{ from: number; label: string; ts: number } | null>(null);
 
   useEffect(() => {
     const n = new Net();
@@ -37,6 +41,9 @@ export default function OnlineFlow({ onExit }: Props) {
         case 'view':
           setView(msg.view);
           setInGame(true);
+          break;
+        case 'emoji':
+          setEmojiEvent({ from: msg.from, label: msg.emoji, ts: Date.now() });
           break;
         case 'joined':
           setHostId(msg.hostId);
@@ -56,15 +63,15 @@ export default function OnlineFlow({ onExit }: Props) {
         if (raw) {
           try {
             const saved = JSON.parse(raw) as SavedSession;
-          const savedAvatar = loadAvatar();
-          n.send({ type: 'rejoin', code: saved.code, playerId: saved.playerId, name: saved.name, avatar: savedAvatar });
-          n.setResume(() => ({
-            type: 'rejoin',
-            code: saved.code,
-            playerId: saved.playerId,
-            name: saved.name,
-            avatar: savedAvatar,
-          }));
+            const savedAvatar = loadAvatar();
+            n.send({ type: 'rejoin', code: saved.code, playerId: saved.playerId, name: saved.name, avatar: savedAvatar });
+            n.setResume(() => ({
+              type: 'rejoin',
+              code: saved.code,
+              playerId: saved.playerId,
+              name: saved.name,
+              avatar: savedAvatar,
+            }));
           } catch {
             localStorage.removeItem(ONLINE_KEY);
           }
@@ -87,6 +94,10 @@ export default function OnlineFlow({ onExit }: Props) {
     [],
   );
 
+  const sendEmoji = useCallback((label: string) => {
+    netRef.current?.send({ type: 'emoji', emoji: label });
+  }, []);
+
   const restart = useCallback(() => {
     netRef.current?.send({ type: 'restart' });
   }, []);
@@ -95,8 +106,7 @@ export default function OnlineFlow({ onExit }: Props) {
     localStorage.removeItem(ONLINE_KEY);
     netRef.current?.setResume(null);
     netRef.current?.close();
-    onExit();
-  }, [onExit]);
+  }, []);
 
   if (connectError) {
     return (
@@ -104,8 +114,8 @@ export default function OnlineFlow({ onExit }: Props) {
         <h1 className="menu-title">联机对战</h1>
         <p className="hint hint-error">{connectError}</p>
         <div className="menu-actions">
-          <button className="btn btn-big" onClick={onExit}>
-            返回主菜单
+          <button className="btn btn-big" onClick={onLocal}>
+            本地模式
           </button>
         </div>
       </div>
@@ -115,8 +125,8 @@ export default function OnlineFlow({ onExit }: Props) {
   if (!net) {
     return (
       <div className="menu">
-        <h1 className="menu-title">联机对战</h1>
-        <p className="hint">正在连接服务器…</p>
+        <h1 className="menu-title">换牌王</h1>
+        <p className="hint">正在连接联机服务器…</p>
       </div>
     );
   }
@@ -128,6 +138,8 @@ export default function OnlineFlow({ onExit }: Props) {
           view,
           myId: view.viewerId,
           send: sendAction,
+          sendEmoji,
+          emojiEvent,
           onRestart: restart,
           canRestart: view.viewerId === hostId,
           onExit: leave,
@@ -137,5 +149,5 @@ export default function OnlineFlow({ onExit }: Props) {
     );
   }
 
-  return <LobbyScreen net={net} onEnterGame={() => setInGame(true)} onLeave={leave} />;
+  return <LobbyScreen net={net} onEnterGame={() => setInGame(true)} onLocal={onLocal} onGuided={onGuided} />;
 }

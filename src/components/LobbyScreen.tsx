@@ -28,17 +28,23 @@ interface Props {
   net: Net;
   /** 服务器下发 gameStart（对局开始），切换到牌桌 */
   onEnterGame: () => void;
-  /** 离开大厅/房间，返回主菜单 */
-  onLeave: () => void;
+  /** 热座模式（本地配置页） */
+  onLocal: () => void;
+  /** 引导局（直接开始教学对局） */
+  onGuided: () => void;
 }
-
-export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
+export default function LobbyScreen({ net, onEnterGame, onLocal, onGuided }: Props) {
   const [name, setName] = useState(() => localStorage.getItem('cardexchange-name') ?? '');
   const [avatar, setAvatar] = useState(loadAvatar());
   const [joinCode, setJoinCode] = useState('');
   const [room, setRoom] = useState<RoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openRooms, setOpenRooms] = useState<OpenRoom[]>([]);
+  // 建房房间设置（创建时随 createRoom 下发）
+  const [createFollowMs, setCreateFollowMs] = useState(3000);
+  const [createBonus, setCreateBonus] = useState(true);
+  const [createSelfFollow, setCreateSelfFollow] = useState(true);
+  const [createBotMemory, setCreateBotMemory] = useState(0.2);
   const nameRef = useRef(name);
   nameRef.current = name;
   const avatarRef = useRef(avatar);
@@ -126,7 +132,6 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
   function leave() {
     localStorage.removeItem(ONLINE_KEY);
     net.setResume(null);
-    onLeave();
   }
 
   if (room) {
@@ -252,12 +257,48 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
                   setError('请先输入昵称');
                   return;
                 }
-                net.send({ type: 'createRoom', name, avatar });
+                net.send({ type: 'createRoom', name, avatar, config: { followWindowMs: createFollowMs, declareBonus: createBonus, allowSelfFollow: createSelfFollow, botMemory: createBotMemory } });
               }}
             >
               创建房间
             </button>
             <p className="hint">创建后可在房间内添加机器人（1~3 个）或等待玩家加入，最多 4 人</p>
+            <details className="room-settings">
+              <summary>⚙ 房间设置</summary>
+              <div className="settings-grid">
+                <div>
+                  <label>跟弃窗口</label>
+                  <div className="btn-group">
+                    {[2000, 3000, 4000].map((ms) => (
+                      <button key={ms} className={createFollowMs === ms ? "btn btn-primary" : "btn"} onClick={() => setCreateFollowMs(ms)}>
+                        {ms / 1000} 秒
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label>机器人难度</label>
+                  <div className="btn-group">
+                    {[
+                      { v: 0.4, t: "新手" },
+                      { v: 0.2, t: "标准" },
+                      { v: 0, t: "高手" },
+                    ].map((o) => (
+                      <button key={o.v} className={createBotMemory === o.v ? "btn btn-primary" : "btn"} onClick={() => setCreateBotMemory(o.v)}>
+                        {o.t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label>规则开关</label>
+                  <div className="btn-group">
+                    <button className={createBonus ? "btn btn-primary" : "btn"} onClick={() => setCreateBonus(!createBonus)}>定牌奖励 {createBonus ? "开" : "关"}</button>
+                    <button className={createSelfFollow ? "btn btn-primary" : "btn"} onClick={() => setCreateSelfFollow(!createSelfFollow)}>跟弃自己 {createSelfFollow ? "开" : "关"}</button>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -330,10 +371,12 @@ export default function LobbyScreen({ net, onEnterGame, onLeave }: Props) {
           </div>
         </div>
       </div>
-
-      <div className="menu-actions">
-        <button className="btn" onClick={onLeave}>
-          返回主菜单
+      <div className="menu-actions menu-actions-sub">
+        <button className="btn" onClick={onLocal}>
+          👥 热座模式（本地）
+        </button>
+        <button className="btn" onClick={onGuided}>
+          🎓 引导局（新手教学）
         </button>
       </div>
       {error && <p className="hint hint-error">{error}</p>}

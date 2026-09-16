@@ -18,29 +18,57 @@ function loadSaved(): GameConfigUI | null {
 
 interface Props {
   onStart: (config: GameConfigUI) => void;
-  onOnline: () => void;
+  /** 返回主页（联机大厅） */
+  onBack?: () => void;
 }
 
-export default function MenuScreen({ onStart, onOnline }: Props) {
+export default function MenuScreen({ onStart, onBack }: Props) {
   const saved = loadSaved();
   const [playerCount, setPlayerCount] = useState(saved?.playerCount ?? 2);
   const [botCount, setBotCount] = useState(saved?.botCount ?? 1);
   const [avatar, setAvatar] = useState(loadAvatar());
   const [showRules, setShowRules] = useState(false);
+  const [followWindowMs, setFollowWindowMs] = useState(saved?.followWindowMs ?? 3000);
+  const [declareBonus, setDeclareBonus] = useState(saved?.declareBonus ?? true);
+  const [allowSelfFollow, setAllowSelfFollow] = useState(saved?.allowSelfFollow ?? true);
+  const [botMemory, setBotMemory] = useState(saved?.botMemory ?? 0.2);
 
   const maxBots = playerCount - 1;
   const validBotCount = Math.min(botCount, maxBots);
 
   function start() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ playerCount, botCount: validBotCount }));
+    const cfg: GameConfigUI = {
+      playerCount,
+      botCount: validBotCount,
+      avatars: [avatar],
+      followWindowMs,
+      declareBonus,
+      allowSelfFollow,
+      botMemory,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
     localStorage.setItem(AVATAR_KEY, avatar);
-    onStart({ playerCount, botCount: validBotCount, avatars: [avatar] });
+    onStart(cfg);
+  }
+
+  function startGuided() {
+    localStorage.setItem(AVATAR_KEY, avatar);
+    onStart({
+      playerCount: 2,
+      botCount: 1,
+      avatars: [avatar],
+      guided: true,
+      botMemory: 0.4,
+      followWindowMs,
+      declareBonus,
+      allowSelfFollow,
+    });
   }
 
   return (
     <div className="menu">
       <h1 className="menu-title">♠ 换牌王 ♥</h1>
-      <p className="menu-sub">扑克策略博弈 · 手牌总分最小者获胜</p>
+      <p className="menu-sub">本地模式 · 热座轮流操作或与机器人对战</p>
 
       <div className="menu-section">
         <label>玩家数量（热座轮流操作）</label>
@@ -77,9 +105,7 @@ export default function MenuScreen({ onStart, onOnline }: Props) {
           <p className="hint">纯人机对战：1 名真人 + {validBotCount} 个机器人</p>
         )}
         {playerCount - validBotCount > 1 && (
-          <p className="hint">
-            纯热座对战：{playerCount - validBotCount} 名真人轮流操作（共用此屏幕）
-          </p>
+          <p className="hint">纯热座对战：{playerCount - validBotCount} 名真人轮流操作（共用此屏幕）</p>
         )}
       </div>
 
@@ -88,16 +114,73 @@ export default function MenuScreen({ onStart, onOnline }: Props) {
         <AvatarPicker value={avatar} onChange={setAvatar} />
       </div>
 
+      <div className="menu-section">
+        <label>机器人难度（记忆误差）</label>
+        <div className="btn-group">
+          {[
+            { v: 0.4, t: '新手（易记错）' },
+            { v: 0.2, t: '标准' },
+            { v: 0, t: '高手（完美记忆）' },
+          ].map((o) => (
+            <button
+              key={o.v}
+              className={botMemory === o.v ? 'btn btn-primary' : 'btn'}
+              onClick={() => setBotMemory(o.v)}
+            >
+              {o.t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="menu-section">
+        <label>跟弃窗口时长</label>
+        <div className="btn-group">
+          {[2000, 3000, 4000].map((ms) => (
+            <button
+              key={ms}
+              className={followWindowMs === ms ? 'btn btn-primary' : 'btn'}
+              onClick={() => setFollowWindowMs(ms)}
+            >
+              {ms / 1000} 秒
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="menu-section">
+        <label>游戏规则开关</label>
+        <div className="btn-group">
+          <button
+            className={declareBonus ? 'btn btn-primary' : 'btn'}
+            onClick={() => setDeclareBonus(!declareBonus)}
+          >
+            定牌奖励 {declareBonus ? '开' : '关'}
+          </button>
+          <button
+            className={allowSelfFollow ? 'btn btn-primary' : 'btn'}
+            onClick={() => setAllowSelfFollow(!allowSelfFollow)}
+          >
+            允许跟弃自己 {allowSelfFollow ? '开' : '关'}
+          </button>
+        </div>
+      </div>
+
       <div className="menu-actions">
         <button className="btn btn-big btn-primary" onClick={start}>
           开始游戏
         </button>
-        <button className="btn btn-big" onClick={onOnline}>
-          联机对战
+        <button className="btn btn-big" onClick={startGuided}>
+          🎓 引导局（新手教学）
         </button>
         <button className="btn btn-big" onClick={() => setShowRules(true)}>
           规则说明
         </button>
+        {onBack && (
+          <button className="btn" onClick={onBack}>
+            返回主页
+          </button>
+        )}
       </div>
 
       {showRules && (
@@ -111,6 +194,7 @@ export default function MenuScreen({ onStart, onOnline }: Props) {
               <li><b>摸牌</b>：每回合摸 1 张，可发动功能 / 弃牌 / 替换手牌。弃牌后不补牌，手牌可为 0。</li>
               <li><b>跟弃</b>：有人弃牌时，持同分牌的玩家可抢着跟弃，先操作者成功；失败者罚补 1 张牌。</li>
               <li><b>定牌</b>：自己回合可宣布定牌，其余玩家各操作一轮后终局；此后不能对定牌玩家换牌。</li>
+              <li><b>定牌奖励（可开关）</b>：定牌时牌堆剩余 ≥60% 手牌总分 −2，≥35% −1。</li>
               <li><b>牌堆耗尽</b>：牌堆摸完仍未定牌，直接结算，总分最低者胜。</li>
             </ul>
             <button className="btn btn-primary" onClick={() => setShowRules(false)}>

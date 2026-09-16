@@ -22,6 +22,10 @@ export interface OnlineGameProps {
   send: (a: Action) => void;
   onRestart: () => void;
   canRestart: boolean;
+  /** 发送快捷表情（联机） */
+  sendEmoji?: (label: string) => void;
+  /** 收到的他人表情事件（from=对局内玩家 id） */
+  emojiEvent?: { from: number; label: string; ts: number } | null;
   onExit: () => void;
 }
 
@@ -43,6 +47,18 @@ const REVEAL_MS = 5000; // 翻看展示限时
 const FOLLOW_WINDOW_MS = 3000; // 跟弃窗口固定时长（3 秒：反应+回忆刚好，点放弃可提前关闭）
 /** 热座/单机多局累计积分（localStorage，按真人玩家名累计） */
 const TOTAL_KEY = 'cardexchange-total-scores';
+/** 快捷表情预设（8 个：表情+短语） */
+const EMOJIS = ['😤 跟！', '😏 记不住', '🤝 好牌', '💪 加油', '😂 哈哈', '😅 失误', '🙈 看不见', '🎯 定牌！'];
+/** 引导局教学提示：功能牌能力说明 */
+const GUIDE_TIP: Record<string, string> = {
+  '7': '摸到 7：可以看自己的一张牌',
+  '8': '摸到 8：可以看自己的一张牌',
+  '9': '摸到 9：可以看其他玩家的一张牌',
+  '10': '摸到 10：可以看其他玩家的一张牌',
+  J: '摸到 J：暗换（用自己的牌换别人的牌）',
+  Q: '摸到 Q：暗换（用自己的牌换别人的牌）',
+  K: '摸到 K：明换（看完双方牌再决定换不换）',
+};
 
 /**
  * 计算翻看/明换展示中需要强制正面的牌。
@@ -92,7 +108,17 @@ export default function GameScreen({ config, online, onExit }: Props) {
   const [followLeft, setFollowLeft] = useState(0);
   // 联机：已点放弃（窗口需等其他玩家决策，避免误以为按钮无效）
   const [gaveUp, setGaveUp] = useState(false);
+  // 快捷表情 toast（本机显示）
+  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
+  const toastIdRef = useRef(0);
+  const showToast = useCallback((text: string) => {
+    const id = ++toastIdRef.current;
+    setToasts((ts) => [...ts, { id, text }]);
+    setTimeout(() => setToasts((ts) => ts.filter((t) => t.id !== id)), 3200);
+  }, []);
 
+  // 跟弃窗口时长：联机读房间设置，本地默认 3 秒
+  const followWindowMs = isOnline && online ? online.view.followWindowMs : FOLLOW_WINDOW_MS;
   // 联机：状态来自服务器视图；本地：内部 reducer
   const state = isOnline && online ? (online.view as unknown as GameState) : localState;
 
@@ -152,7 +178,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
       return;
     }
     if (followStartRef.current === null) followStartRef.current = Date.now();
-    const remaining = Math.max(0, FOLLOW_WINDOW_MS - (Date.now() - followStartRef.current));
+    const remaining = Math.max(0, followWindowMs - (Date.now() - followStartRef.current));
     const t = setTimeout(() => {
       setLocalState((s) => {
         if (s.phase !== 'follow' || !s.follow) return s;
@@ -167,7 +193,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
       });
     }, remaining);
     return () => clearTimeout(t);
-  }, [state.phase, state.follow, isOnline]);
+  }, [state.phase, state.follow, isOnline, followWindowMs]);
 
   // ---- 跟弃窗口倒计时（显示剩余秒数，点放弃可提前关闭） ----
   useEffect(() => {
@@ -180,7 +206,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
     const iv = setInterval(() => {
       if (followStartRef.current === null) followStartRef.current = Date.now();
       const start = followStartRef.current ?? Date.now();
-      const rem = Math.max(0, Math.ceil((FOLLOW_WINDOW_MS - (Date.now() - start)) / 1000));
+      const rem = Math.max(0, Math.ceil((followWindowMs - (Date.now() - start)) / 1000));
       setFollowLeft(rem);
     }, 200);
     return () => clearInterval(iv);
@@ -226,6 +252,14 @@ export default function GameScreen({ config, online, onExit }: Props) {
       /* localStorage 不可用时静默跳过累计 */
     }
   }, [state.phase, state.players, isOnline]);
+
+  // ---- 收到他人快捷表情 → 本地 toast ----
+  useEffect(() => {
+    if (!online?.emojiEvent) return;
+    const ev = online.emojiEvent;
+    const name = state.players[ev.from]?.name ?? `玩家${ev.from + 1}`;
+    showToast(`${name}：${ev.label}`);
+  }, [online?.emojiEvent, state.players, showToast]);
 
   // ---- 视角：本地为当前行动玩家；联机用服务器按 viewer 生成的视图 ----
   const view = useMemo(
@@ -359,11 +393,35 @@ export default function GameScreen({ config, online, onExit }: Props) {
             <li>7/8 看自己 · 9/10 看别人 · J/Q 暗换 · K 明换</li>
             <li>弃牌不补牌；同分可跟弃，抢先成功，失败罚补 1 张</li>
             <li>自己回合可定牌，其余人各操作一轮后终局</li>
+            <li>定牌奖励（可开关）：定牌时牌堆剩余 ≥60% 手牌总分 −2，≥35% −1</li>
             <li>牌堆耗尽：总分最低者胜</li>
           </ul>
         </div>
       )}
 
+      {/* 引导局教学提示：摸到功能牌时显示对应说明 */}
+      {config?.guided && state.pending?.kind === "drawn" && state.pending.card && (
+        <div className="guided-tip">
+          💡 {GUIDE_TIP[state.pending.card.rank as keyof typeof GUIDE_TIP] ?? "摸到功能牌，注意它的能力"}
+        </div>
+      )}
+      {/* 快捷表情栏：对局中随时可发 */}
+      <div className="emoji-bar">
+        {EMOJIS.map((e) => (
+          <button key={e} className="emoji-btn" onClick={() => {
+            showToast(`你：${e}`);
+            online?.sendEmoji?.(e);
+          }}>
+            {e}
+          </button>
+        ))}
+      </div>
+      {/* 表情 toast 层 */}
+      <div className="toasts">
+        {toasts.map((t) => (
+          <div key={t.id} className="toast">{t.text}</div>
+        ))}
+      </div>
       <div className="game-main">
         <div className="table">
           {state.phase === 'follow' && state.follow && (
