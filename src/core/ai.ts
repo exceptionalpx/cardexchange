@@ -1,13 +1,19 @@
-// 机器人 AI：MVP 基础策略
+// 机器人 AI：基础策略 + 记忆误差（难度分级）
 // 所有决策通过 canApply 校验，非法时回退到保守动作。
+// 记忆误差：botMemory>0 时，每次决策把"已看过的牌"以概率 P 视为未知（仅本次决策，不改 knowledge），
+// 模拟新手机器人记不住牌；高手（0）为完美记忆。
 import type { Action, Card, GameState, PendingAction } from './types';
 import { canApply } from './engine';
 import { scoreOf } from './score';
-import { buildView } from './view';
+import { buildView, type PlayerView } from './view';
 
 const HIGH_SCORE = 7; // 视为"高分"的阈值（AI 愿意用功能牌换走）
 
-export function aiDecide(state: GameState, playerId: number): Action {
+export function aiDecide(
+  state: GameState,
+  playerId: number,
+  rng: () => number = Math.random,
+): Action {
   // 发牌阶段：自动确认盖牌
   if (state.phase === 'deal') return { type: 'CONFIRM_DEAL' };
 
@@ -27,11 +33,11 @@ export function aiDecide(state: GameState, playerId: number): Action {
 
   // 挂起交互
   const pend = state.pending;
-  if (pend) return decidePending(state, playerId, pend);
+  if (pend) return decidePending(state, playerId, pend, rng);
 
   // 回合开始：手牌均分低则定牌，否则摸牌
   if (state.phase === 'playing') {
-    const view = buildView(state, playerId);
+    const view = aiView(state, playerId, rng);
     const known = view.players[playerId].slots.filter((s) => s.known && s.card);
     if (known.length > 0) {
       const avg = known.reduce((sum, s) => sum + scoreOf(s.card!), 0) / known.length;
@@ -44,13 +50,18 @@ export function aiDecide(state: GameState, playerId: number): Action {
   return { type: 'DRAW' };
 }
 
-function decidePending(state: GameState, playerId: number, pend: PendingAction): Action {
+function decidePending(
+  state: GameState,
+  playerId: number,
+  pend: PendingAction,
+  rng: () => number,
+): Action {
   switch (pend.kind) {
     case 'drawn':
-      return decideDrawn(state, playerId, pend.card);
+      return decideDrawn(state, playerId, pend.card, rng);
     case 'chooseSelfSlot': {
       // 7/8 查看自己：优先未知槽位
-      const view = buildView(state, playerId);
+      const view = aiView(state, playerId, rng);
       const me = view.players[playerId];
       const unknownIdx = me.slots.findIndex((s) => s.card && !s.known);
       const idx = unknownIdx >= 0 ? unknownIdx : me.slots.findIndex((s) => s.card);
@@ -58,7 +69,7 @@ function decidePending(state: GameState, playerId: number, pend: PendingAction):
     }
     case 'chooseOtherSlot': {
       // 9/10 查看他人：优先未知槽位
-      const view = buildView(state, playerId);
+      const view = aiView(state, playerId, rng);
       const others = view.players.filter((p) => p.id !== playerId);
       for (const op of others) {
         for (let i = 0; i < op.slots.length; i++) {
@@ -73,7 +84,7 @@ function decidePending(state: GameState, playerId: number, pend: PendingAction):
     case 'chooseSwap': {
       // 换牌（J/Q/K）任意顺序：先选自己已知最高分，再选对方任意一张
       if (pend.selfSlot === null) {
-        const view = buildView(state, playerId);
+        const view = aiView(state, playerId, rng);
         const me = view.players[playerId];
         let bestIdx = -1;
         let bestScore = -Infinity;
@@ -89,31 +100,38 @@ function decidePending(state: GameState, playerId: number, pend: PendingAction):
       return fallbackOther(state, playerId);
     }
     case 'confirmReveal':
-      // 对方牌分数更低才换
+      // 对方牌分数更低才换（明换当下互看，不依赖记忆）
       return scoreOf(pend.otherCard) < scoreOf(pend.selfCard) ? { type: 'SWAP' } : { type: 'KEEP' };
     case 'revealDone':
-      // 机器人无记忆限制，翻看后立即确认收起
+      // 翻看后立即确认收起
       return { type: 'REVEAL_DONE' };
     default:
       return fallback(state, playerId);
   }
 }
 
-function decideDrawn(state: GameState, playerId: number, card: Card): Action {
+function decideDrawn(
+  state: GameState,
+  playerId: number,
+  card: Card,
+  rng: () => number,
+): Action {
   const rank = card.rank;
-  const isAbility = rank === '7' || rank === '8' || rank === '9' || rank === '10' || rank === 'J' || rank === 'Q' || rank === 'K';
+  const isAbility =
+    rank === '7' || rank === '8' || rank === '9' || rank === '10' || rank === 'J' || rank === 'Q' || rank === 'K';
+  const view = aiView(state, playerId, rng);
 
   if (isAbility) {
     if (rank === '7' || rank === '8') {
-      if (hasUnknownSelfSlot(state, playerId)) return useAbility(state, playerId);
+      if (hasUnknownSelfSlot(view, playerId)) return useAbility(state, playerId);
       return discardDrawn(state, playerId);
     }
     if (rank === '9' || rank === '10') {
-      if (hasUnknownOtherSlot(state, playerId)) return useAbility(state, playerId);
+      if (hasUnknownOtherSlot(view, playerId)) return useAbility(state, playerId);
       return discardDrawn(state, playerId);
     }
     // J/Q/K：自己有高分已知牌且对方有未知槽位才用
-    if (hasHighKnownSelf(state, playerId) && hasUnknownOtherSlot(state, playerId)) {
+    if (hasHighKnownSelf(view, playerId) && hasUnknownOtherSlot(view, playerId)) {
       return useAbility(state, playerId);
     }
     return discardDrawn(state, playerId);
@@ -138,6 +156,17 @@ function decideDrawn(state: GameState, playerId: number, card: Card): Action {
 
 // ---- 辅助 ----
 
+/** 带记忆误差的视角：botMemory>0 时，每次决策把已看过的牌按概率视为未知（仅本次决策） */
+function aiView(state: GameState, playerId: number, rng: () => number): PlayerView {
+  const view = buildView(state, playerId);
+  const p = state.botMemory ?? 0;
+  if (p <= 0) return view;
+  for (const pl of view.players) {
+    pl.slots = pl.slots.map((s) => (s.card && s.known && rng() < p ? { ...s, known: false } : s));
+  }
+  return view;
+}
+
 function useAbility(state: GameState, playerId: number): Action {
   const a: Action = { type: 'USE_ABILITY' };
   return canApply(state, a) ? a : discardDrawn(state, playerId);
@@ -148,18 +177,15 @@ function discardDrawn(state: GameState, playerId: number): Action {
   return canApply(state, a) ? a : fallback(state, playerId);
 }
 
-function hasUnknownSelfSlot(state: GameState, playerId: number): boolean {
-  const view = buildView(state, playerId);
+function hasUnknownSelfSlot(view: PlayerView, playerId: number): boolean {
   return view.players[playerId].slots.some((s) => s.card && !s.known);
 }
 
-function hasUnknownOtherSlot(state: GameState, playerId: number): boolean {
-  const view = buildView(state, playerId);
+function hasUnknownOtherSlot(view: PlayerView, playerId: number): boolean {
   return view.players.some((p) => p.id !== playerId && p.slots.some((s) => s.card && !s.known));
 }
 
-function hasHighKnownSelf(state: GameState, playerId: number): boolean {
-  const view = buildView(state, playerId);
+function hasHighKnownSelf(view: PlayerView, playerId: number): boolean {
   return view.players[playerId].slots.some((s) => s.card && s.known && scoreOf(s.card) >= HIGH_SCORE);
 }
 

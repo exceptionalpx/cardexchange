@@ -85,7 +85,8 @@ const PLAYER_AVATARS = ['🐯', '🦁', '🐼', '🐨', '🦊', '🐸', '🐧', 
 export function createGame(config: GameConfig, rng: () => number = Math.random): GameState {
   const count = Math.min(4, Math.max(2, config.playerCount));
   const botCount = Math.min(count - 1, Math.max(0, config.botCount));
-  const deck = shuffle(buildDeck(), rng);
+  let deck = shuffle(buildDeck(), rng);
+  if (config.guided) deck = buildGuidedDeck(deck, count);
 
   const players: PlayerState[] = [];
   const bots = config.bots; // 联机房间：机器人可任意座位
@@ -119,9 +120,30 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     lastPenalty: null,
     animSeq: 0,
     finalRemaining: 0,
+    declaredDeckCount: undefined,
+    allowSelfFollow: config.allowSelfFollow !== false,
+    declareBonus: !!config.declareBonus,
+    botMemory: config.botMemory ?? 0,
     winner: null,
     log: [],
   };
+}
+
+
+/** 引导局固定剧本：抽出 7/9/J/K 各一张，放到玩家 1 前 4 次摸牌位置（牌堆顶部），依次演示 看自己→看他人→暗换→明换 */
+function buildGuidedDeck(deck: Card[], count: number): Card[] {
+  const picks: (Card | null)[] = [null, null, null, null];
+  const rest: Card[] = [];
+  const want = ['7', '9', 'J', 'K'];
+  for (const c of deck) {
+    const wi = want.indexOf(c.rank);
+    if (wi >= 0 && !picks[wi]) picks[wi] = c;
+    else rest.push(c);
+  }
+  const ordered = picks as Card[]; // 顺序即 7,9,J,K
+  const head = rest.slice(0, count * 4); // 初始发牌区
+  const tail = rest.slice(count * 4); // 摸牌区
+  return [...head, ...ordered, ...tail];
 }
 
 // ---------- 校验 ----------
@@ -587,6 +609,7 @@ function afterDiscard(state: GameState, discarded: Card): GameState {
   for (const p of state.players) {
     decisions[p.id] = 'pending';
   }
+  if (state.allowSelfFollow === false) decisions[discarder] = 'pass';
   const follow: FollowState = { discarder, targetScore: score, decisions, submitted: [] };
   return {
     ...state,
@@ -716,7 +739,19 @@ function endTurn(state: GameState): GameState {
 // ---- 结算 ----
 
 export function settle(state: GameState): GameState {
+  // 定牌奖励：牌堆剩余占比 >=60% 减 2 分、>=35% 减 1 分（鼓励提前定牌，反拖延）
+  let bonus = 0;
+  if (state.declareBonus && state.declaredPlayer !== null && state.declaredDeckCount !== undefined) {
+    const initDeck = 54 - 4 * state.players.length;
+    const ratio = initDeck > 0 ? state.declaredDeckCount / initDeck : 0;
+    if (ratio >= 0.6) bonus = 2;
+    else if (ratio >= 0.35) bonus = 1;
+  }
   const players = state.players.map((p) => ({ ...p, score: handScore(p.handSlots) }));
+  if (bonus > 0 && state.declaredPlayer !== null) {
+    const dp = state.declaredPlayer;
+    players[dp] = { ...players[dp], score: (players[dp].score ?? 0) - bonus };
+  }
   const min = Math.min(...players.map((p) => p.score ?? 0));
   const winner = players.filter((p) => (p.score ?? 0) === min).map((p) => p.id);
   return {

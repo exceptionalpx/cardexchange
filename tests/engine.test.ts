@@ -50,6 +50,10 @@ function makeGame(
     animSeq: 0,
     finalRemaining: 0,
     winner: null,
+    declaredDeckCount: undefined,
+    allowSelfFollow: true,
+    declareBonus: false,
+    botMemory: 0,
     log: [],
   };
 }

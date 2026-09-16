@@ -122,6 +122,14 @@ export interface GameState {
   animSeq: number;
   /** 定牌后剩余待操作轮次（不含定牌玩家） */
   finalRemaining: number;
+  /** 定牌时牌堆剩余张数（结算定牌奖励用） */
+  declaredDeckCount?: number;
+  /** 是否允许弃牌者自己跟弃（引擎规则开关，默认 true） */
+  allowSelfFollow: boolean;
+  /** 是否启用定牌奖励（引擎规则开关） */
+  declareBonus: boolean;
+  /** 机器人记忆误差概率（AI 决策用，0=完美记忆） */
+  botMemory: number;
   winner: number[] | null;
   log: LogEntry[];
 }
@@ -136,6 +144,16 @@ export interface GameConfig {
   avatars?: (string | undefined)[];
   /** 各座位是否机器人（可选：联机房间座位可任意位置混坐；缺省按 botCount 让机器人坐末尾） */
   bots?: boolean[];
+  /** 跟弃窗口毫秒（2000/3000/4000，默认 3000） */
+  followWindowMs?: number;
+  /** 启用定牌奖励：提前定牌按牌堆剩余占比结算减分（默认 false） */
+  declareBonus?: boolean;
+  /** 是否允许弃牌者自己跟弃（默认 true） */
+  allowSelfFollow?: boolean;
+  /** 机器人记忆误差概率（0/0.2/0.4，默认 0=完美记忆） */
+  botMemory?: number;
+  /** 引导局：固定剧本牌序（玩家 1 前 4 次摸牌为 7/9/J/K）+ 步骤提示 */
+  guided?: boolean;
 }
 
 // ---- 动作定义 ----
