@@ -90,6 +90,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
   const scoredRef = useRef(false);
   // 跟弃窗口剩余秒数（倒计时显示）
   const [followLeft, setFollowLeft] = useState(0);
+  // 联机：已点放弃（窗口需等其他玩家决策，避免误以为按钮无效）
+  const [gaveUp, setGaveUp] = useState(false);
 
   // 联机：状态来自服务器视图；本地：内部 reducer
   const state = isOnline && online ? (online.view as unknown as GameState) : localState;
@@ -170,6 +172,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // ---- 跟弃窗口倒计时（显示剩余秒数，点放弃可提前关闭） ----
   useEffect(() => {
     if (state.phase !== 'follow' || !state.follow) {
+      setGaveUp(false);
       setFollowLeft(0);
       return;
     }
@@ -260,17 +263,18 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }
   }
 
-  // ---- 跟弃窗口：放弃（联机=放弃自己；热座=全体真人放弃，提前关闭窗口） ----
+  // ---- 跟弃窗口：放弃（联机=放弃自己；热座=全体玩家含机器人放弃，立即关闭窗口） ----
   const passFollowAll = useCallback(() => {
     if (!state.follow) return;
     if (isOnline && online) {
       dispatch({ type: 'PASS_FOLLOW', playerId: online.myId });
+      setGaveUp(true);
       return;
     }
     let ns = state;
     for (const [idStr, d] of Object.entries(state.follow.decisions)) {
       const id = Number(idStr);
-      if (d === 'pending' && !state.players[id].isBot) {
+      if (d === 'pending') {
         ns = applyAction(ns, { type: 'PASS_FOLLOW', playerId: id });
       }
     }
@@ -363,8 +367,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
           {state.phase === 'follow' && state.follow && (
             <div className="follow-bar">
               <span className="follow-timer">可跟弃 · {followLeft}s</span>
-              <button className="btn btn-small" onClick={passFollowAll}>
-                放弃
+              <button className="btn btn-small" onClick={passFollowAll} disabled={isOnline && gaveUp}>
+                {isOnline && gaveUp ? '已放弃（等待其他玩家）' : '放弃'}
               </button>
             </div>
           )}
