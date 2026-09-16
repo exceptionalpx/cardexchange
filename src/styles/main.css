@@ -1173,3 +1173,23 @@ body {
     padding: 10px;
   }
 }
+
+/* ============ 移动端：中间区三块紧凑横排（方案A） ============ */
+@media (max-width: 760px) {
+  .center-area {
+    gap: 16px;
+  }
+  /* 弃牌堆 / 已使用功能牌：窄屏只显示最近 2 张，其余由"共 N 张"标签体现 */
+  .pile-cards .card:nth-child(n + 3) {
+    display: none;
+  }
+}
+/* ---- 方案A补充：移动端顶部栏不换行，隐藏次要"牌堆剩余"徽章 ---- */
+@media (max-width: 760px) {
+  .game-header {
+    flex-wrap: nowrap;
+  }
+  .badge-deck {
+    display: none;
+  }
+}
