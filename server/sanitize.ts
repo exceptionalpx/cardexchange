@@ -1,6 +1,6 @@
 // 每玩家视角脱敏：服务器权威的信息隐藏层
 // 只把该玩家该看的内容下发到客户端，对手手牌、牌堆内容、他人 knowledge 一律不下发。
-import type { Card, GameState, PendingAction } from '../src/core/types';
+import type { Card, GameConfig, GameState, PendingAction } from '../src/core/types';
 import { buildView } from '../src/core/view';
 import type { ClientGameView } from './protocol';
 
@@ -38,7 +38,7 @@ export function sanitizePending(
 export function buildClientView(
   state: GameState,
   viewerId: number,
-  meta?: { totalScores: Record<number, number>; gamesPlayed: number },
+  meta?: { totalScores: Record<number, number>; gamesPlayed: number; config?: Partial<GameConfig> },
 ): ClientGameView {
   return {
     viewerId,
@@ -71,5 +71,6 @@ export function buildClientView(
     view: buildView(state, viewerId),
     totalScores: meta?.totalScores ?? {},
     gamesPlayed: meta?.gamesPlayed ?? 0,
+    followWindowMs: meta?.config?.followWindowMs ?? 3000,
   };
 }

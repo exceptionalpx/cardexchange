@@ -1,5 +1,5 @@
 // 联机协议：客户端 ↔ 服务器消息类型
-import type { Action, Card, GameState, LogEntry, PendingAction, Phase, PlayerState } from '../src/core/types';
+import type { Action, Card, GameConfig, GameState, LogEntry, PendingAction, Phase, PlayerState } from '../src/core/types';
 import type { PlayerView } from '../src/core/view';
 
 /** 大厅座位信息 */
@@ -49,18 +49,21 @@ export interface ClientGameView {
   totalScores: Record<number, number>;
   /** 已玩局数 */
   gamesPlayed: number;
+  /** 跟弃窗口时长（客户端倒计时用，来自房间设置） */
+  followWindowMs: number;
 }
 
 export type ClientMessage =
-  | { type: 'createRoom'; name: string; avatar?: string }
-  | { type: 'joinRoom'; code: string; name: string; avatar?: string }
+  | { type: 'createRoom'; name: string; avatar?: string; config?: Partial<GameConfig> }
+  | { type: 'joinRoom'; code: string; name: string; avatar?: string; config?: Partial<GameConfig> }
   | { type: 'addBot' }
   | { type: 'removeBot' }
   | { type: 'ready'; ready: boolean }
   | { type: 'startGame' }
   | { type: 'action'; action: Action }
   | { type: 'restart' }
-  | { type: 'rejoin'; code: string; playerId: number; name: string; avatar?: string };
+  | { type: 'rejoin'; code: string; playerId: number; name: string; avatar?: string; config?: Partial<GameConfig> }
+  | { type: 'emoji'; emoji: string };
 
 export type ServerMessage =
   | {
@@ -85,4 +88,5 @@ export type ServerMessage =
   | { type: 'gameStart'; myId: number }
   | { type: 'view'; view: ClientGameView }
   | { type: 'roomClosed'; message: string }
+  | { type: 'emoji'; from: number; emoji: string }
   | { type: 'error'; message: string };

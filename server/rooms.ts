@@ -2,7 +2,7 @@
 // 房间模型：固定 4 个座位，建房只占房主 1 座；房主可添加/移除机器人，真人加入坐空位；
 // 所有真人"准备"后房主才能开局；对局后按座位累计总分（多局连打，总分最小者最终胜）。
 import type { WebSocket } from 'ws';
-import type { Action, GameState } from '../src/core/types';
+import type { Action, GameConfig, GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
 import { aiDecide } from '../src/core/ai';
 import { buildClientView } from './sanitize';
@@ -32,6 +32,8 @@ export interface Room {
   gamesPlayed: number;
   /** 本局是否已累计（restart 时重置，防止重复累加） */
   scoringDone: boolean;
+  /** 房间游戏设置（跟弃窗口/定牌奖励/跟弃自己/机器人难度） */
+  config: Partial<GameConfig>;
 }
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -50,7 +52,7 @@ export function emptySeat(id: number): Seat {
 }
 
 /** 建房：只占房主 1 座，其余 3 座为空位，人数/机器人由房主后续调整 */
-export function createRoom(code: string, name: string, avatar?: string): Room {
+export function createRoom(code: string, name: string, avatar?: string, config: Partial<GameConfig> = {}): Room {
   const seats: Seat[] = [
     { id: 0, name, isBot: false, ws: null, avatar, ready: false },
     emptySeat(1),
@@ -67,6 +69,7 @@ export function createRoom(code: string, name: string, avatar?: string): Room {
     totalScores: {},
     gamesPlayed: 0,
     scoringDone: false,
+    config,
   };
 }
 
@@ -218,7 +221,7 @@ function schedule(room: Room): void {
             scoreIfEnded(room);
             broadcastView(room);
           }
-        }, 3000),
+        }, room.config.followWindowMs ?? 3000),
       );
     }
   }
@@ -279,6 +282,7 @@ export function startGame(room: Room): void {
   });
   room.scoringDone = false;
   room.state = createGame({
+    ...room.config,
     playerCount: count,
     botCount: occupied.filter((s) => s.isBot).length,
     playerNames: occupied.map((s) => s.name),
@@ -300,6 +304,7 @@ export function restartGame(room: Room): void {
   });
   room.scoringDone = false;
   room.state = createGame({
+    ...room.config,
     playerCount: count,
     botCount: occupied.filter((s) => s.isBot).length,
     playerNames: occupied.map((s) => s.name),
@@ -342,9 +347,21 @@ export function broadcastView(room: Room): void {
     seat.ws.send(
       JSON.stringify({
         type: 'view',
-        view: buildClientView(state, pid, { totalScores: metaTotal, gamesPlayed: room.gamesPlayed }),
+        view: buildClientView(state, pid, { totalScores: metaTotal, gamesPlayed: room.gamesPlayed, config: room.config }),
       }),
     );
+  }
+}
+
+/** 对局中表情广播：发给同房其他真人（发送者本地自己显示 toast） */
+export function broadcastEmoji(room: Room, fromSeat: number, emoji: string): void {
+  if (!room.state) return;
+  const fromPid = room.pidBySeat?.[fromSeat] ?? -1;
+  if (fromPid < 0) return;
+  for (const seat of room.seats) {
+    if (seat.isBot || !seat.ws || seat.ws.readyState !== 1) continue;
+    if (seat.id === fromSeat) continue; // 发送者本地已显示，避免重复
+    seat.ws.send(JSON.stringify({ type: 'emoji', from: fromPid, emoji }));
   }
 }
 

@@ -9,6 +9,7 @@ import type { ClientMessage } from './protocol';
 import {
   addBot,
   broadcastRoom,
+  broadcastEmoji,
   broadcastView,
   canStart,
   clearTimers,
@@ -119,7 +120,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case 'createRoom': {
       const code = genCode((c) => rooms.has(c));
-      const room = createRoom(code, msg.name.trim() || '玩家1', msg.avatar);
+      const room = createRoom(code, msg.name.trim() || '玩家1', msg.avatar, msg.config);
       rooms.set(code, room);
       room.seats[0].ws = ws;
       connMeta.set(ws, { code, seatId: 0 });
@@ -147,6 +148,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         return;
       }
       const seatId = joinRoom(room, msg.name.trim() || `玩家${room.seats.length}`, msg.avatar);
+      if (msg.config) room.config = { ...room.config, ...msg.config }; // 加入者携带的设置并入房间
       if (seatId === null) {
         send(ws, { type: 'error', message: '房间已满' });
         return;
@@ -263,6 +265,14 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       const pid = room.pidBySeat?.[meta.seatId] ?? -1;
       if (pid < 0) return;
       handleAction(room, pid, msg.action);
+      return;
+    }
+    case 'emoji': {
+      const meta = connMeta.get(ws);
+      if (!meta) return;
+      const room = rooms.get(meta.code);
+      if (!room) return;
+      broadcastEmoji(room, meta.seatId, msg.emoji);
       return;
     }
     case 'restart': {
