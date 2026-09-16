@@ -208,7 +208,7 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
 
   if (plan.kind === 'discard') {
     return (
-      <div className="swap-anim-layer" aria-hidden>
+      <div className="swap-anim-layer anim-layer-passive" aria-hidden>
         <div
           ref={flyRef}
           className="swap-fly"
@@ -224,7 +224,7 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
 
   if (plan.kind === 'penalty') {
     return (
-      <div className="swap-anim-layer" aria-hidden>
+      <div className="swap-anim-layer anim-layer-passive" aria-hidden>
         <div
           ref={flyRef}
           className="swap-fly"
@@ -237,7 +237,7 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
   }
 
   return (
-    <div className="swap-anim-layer" aria-hidden>
+    <div className="swap-anim-layer anim-layer-passive" aria-hidden>
       <div
         ref={pawRef}
         className="swap-fly"

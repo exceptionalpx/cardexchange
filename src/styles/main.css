@@ -1206,3 +1206,7 @@ body {
   font-weight: 700;
   font-size: 14px;
 }
+/* 弃牌/罚牌动画：纯展示，不拦截点击（跟弃窗口 3 秒内按钮立即可点） */
+.anim-layer-passive {
+  pointer-events: none;
+}
