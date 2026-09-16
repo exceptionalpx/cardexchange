@@ -59,6 +59,8 @@ const GUIDE_TIP: Record<string, string> = {
   Q: '摸到 Q：暗换（用自己的牌换别人的牌）',
   K: '摸到 K：明换（看完双方牌再决定换不换）',
 };
+/** 摸到普通分数牌：讲解弃牌规则（引导局教学） */
+const GUIDE_PLAIN = '这是分数牌：可直接弃掉（弃掉后相同分数可跟弃），或替换手牌里的牌';
 
 /**
  * 计算翻看/明换展示中需要强制正面的牌。
@@ -411,12 +413,6 @@ export default function GameScreen({ config, online, onExit }: Props) {
         </div>
       )}
 
-      {/* 引导局教学提示：摸到功能牌时显示对应说明 */}
-      {config?.guided && state.pending?.kind === "drawn" && state.pending.card && (
-        <div className="guided-tip">
-          💡 {GUIDE_TIP[state.pending.card.rank as keyof typeof GUIDE_TIP] ?? "摸到功能牌，注意它的能力"}
-        </div>
-      )}
       {/* 快捷表情：按钮展开 + 自定义输入 */}
       <button className="emoji-fab" onClick={() => setEmojiOpen((v) => !v)} aria-label="快捷表情">
         💬
@@ -491,6 +487,15 @@ export default function GameScreen({ config, online, onExit }: Props) {
             {/* "可跟弃"标签：始终固定在最新弃牌（黑框牌）正上方 */}
             <DiscardPile state={state} />
             <UsedPile state={state} />
+            {/* 引导局教学提示：跟随牌桌流式显示，不遮挡顶部功能区 */}
+            {config?.guided && state.pending?.kind === "drawn" && state.pending.card && (() => {
+              const r = String(state.pending.card.rank);
+              const isFunc = ["7", "8", "9", "10", "J", "Q", "K"].includes(r);
+              return <div className="guided-tip">💡 {isFunc ? (GUIDE_TIP[r] ?? "") : GUIDE_PLAIN}</div>;
+            })()}
+            {config?.guided && state.phase === "follow" && state.follow && (
+              <div className="guided-tip">💡 有玩家弃牌了：手中有相同分数牌的玩家可以跟弃（抢先成功；抢弃失败会罚补 1 张牌）</div>
+            )}
           </div>
 
           <div className="seats">

@@ -1313,23 +1313,22 @@ body {
 }
 
 .guided-tip {
-  position: fixed;
-  top: 64px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 45;
+  margin: 8px auto 0;
+  max-width: 92%;
+  text-align: center;
   background: linear-gradient(135deg, #ffb74d, #ff8a3d);
   color: #3a1600;
   font-weight: 700;
-  font-size: 15px;
-  padding: 8px 18px;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 8px 14px;
   border-radius: 999px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   animation: guided-pulse 1.2s ease-in-out infinite;
 }
 @keyframes guided-pulse {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50% { transform: translateX(-50%) scale(1.04); }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
 }
 
 .room-settings {
