@@ -106,6 +106,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // 规则/游戏进程面板：点击按钮展开，默认收起
   const [showRules, setShowRules] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiText, setEmojiText] = useState("");
   // 热座/单机多局累计（本地 localStorage）
   const [localTotals, setLocalTotals] = useState<{ games: number; scores: Record<string, number> } | null>(null);
   const scoredRef = useRef(false);
@@ -415,17 +417,52 @@ export default function GameScreen({ config, online, onExit }: Props) {
           💡 {GUIDE_TIP[state.pending.card.rank as keyof typeof GUIDE_TIP] ?? "摸到功能牌，注意它的能力"}
         </div>
       )}
-      {/* 快捷表情栏：对局中随时可发 */}
-      <div className="emoji-bar">
-        {EMOJIS.map((e) => (
-          <button key={e} className="emoji-btn" onClick={() => {
-            showToast(`你：${e}`);
-            online?.sendEmoji?.(e);
-          }}>
-            {e}
-          </button>
-        ))}
-      </div>
+      {/* 快捷表情：按钮展开 + 自定义输入 */}
+      <button className="emoji-fab" onClick={() => setEmojiOpen((v) => !v)} aria-label="快捷表情">
+        💬
+      </button>
+      {emojiOpen && (
+        <div className="emoji-panel">
+          <div className="emoji-grid">
+            {EMOJIS.map((e) => (
+              <button key={e} className="emoji-btn" onClick={() => {
+                showToast(`你：${e}`);
+                online?.sendEmoji?.(e);
+                setEmojiOpen(false);
+              }}>
+                {e}
+              </button>
+            ))}
+          </div>
+          <div className="emoji-custom">
+            <input
+              value={emojiText}
+              maxLength={20}
+              placeholder="输入想说的话…"
+              onChange={(ev) => setEmojiText(ev.target.value)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" && emojiText.trim()) {
+                  const t = emojiText.trim();
+                  showToast(`你：${t}`);
+                  online?.sendEmoji?.(t);
+                  setEmojiText("");
+                  setEmojiOpen(false);
+                }
+              }}
+            />
+            <button className="btn btn-primary" disabled={!emojiText.trim()} onClick={() => {
+              const t = emojiText.trim();
+              if (!t) return;
+              showToast(`你：${t}`);
+              online?.sendEmoji?.(t);
+              setEmojiText("");
+              setEmojiOpen(false);
+            }}>
+              发送
+            </button>
+          </div>
+        </div>
+      )}
       {/* 表情 toast 层 */}
       <div className="toasts">
         {toasts.map((t) => (
