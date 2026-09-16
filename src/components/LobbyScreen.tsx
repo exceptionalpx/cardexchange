@@ -229,7 +229,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
 
   return (
     <div className="menu lobby">
-      <h1 className="menu-title">♠ 联机对战 ♥</h1>
+      <h1 className="menu-title">♠ 换牌王 ♥</h1>
       <p className="menu-sub">公网联机 · 创建房间后可添加机器人或等待朋友加入</p>
 
       <div className="menu-section">
@@ -262,8 +262,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
               创建房间
             </button>
             <p className="hint">创建后可在房间内添加机器人（1~3 个）或等待玩家加入，最多 4 人</p>
-            <details className="room-settings">
-              <summary>⚙ 房间设置</summary>
+              <div className="settings-title">⚙ 房间设置</div>
               <div className="settings-grid">
                 <div>
                   <label>跟弃窗口</label>
@@ -297,7 +296,6 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
                   </div>
                 </div>
               </div>
-            </details>
           </div>
         </div>
 
