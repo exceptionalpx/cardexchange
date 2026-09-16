@@ -14,6 +14,7 @@ import ResultScreen from './ResultScreen';
 import SwapAnim from './SwapAnim';
 import MoveAnim from './MoveAnim';
 import PeekAnim from './PeekAnim';
+import CardView from './CardView';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
 export interface OnlineGameProps {
@@ -43,6 +44,11 @@ const REVEAL_MS = 5000; // 翻看展示限时
 const FOLLOW_WINDOW_MS = 4000; // 跟弃窗口固定时长
 /** 热座/单机多局累计积分（localStorage，按真人玩家名累计） */
 const TOTAL_KEY = 'cardexchange-total-scores';
+
+/** 移动端方案B：桌布按此设计宽度布局后整体缩放铺满屏宽（720 在 390px 屏下缩放约 0.54，卡片仍可辨认） */
+const DESKTOP_W = 720;
+/** 小于该宽度视为移动端（触屏缩放适配） */
+const MOBILE_BREAKPOINT = 760;
 
 /**
  * 计算翻看/明换展示中需要强制正面的牌。
@@ -89,8 +95,35 @@ export default function GameScreen({ config, online, onExit }: Props) {
   const [localTotals, setLocalTotals] = useState<{ games: number; scores: Record<string, number> } | null>(null);
   const scoredRef = useRef(false);
 
+  // ---- 移动端检测与整体缩放（方案B） ----
+  const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth));
+  useEffect(() => {
+    const f = () => setVw(window.innerWidth);
+    window.addEventListener('resize', f);
+    return () => window.removeEventListener('resize', f);
+  }, []);
+  const isMobile = vw <= MOBILE_BREAKPOINT;
+  const scale = isMobile ? Math.max(0.25, vw / DESKTOP_W) : 1;
+
   // 联机：状态来自服务器视图；本地：内部 reducer
   const state = isOnline && online ? (online.view as unknown as GameState) : localState;
+
+  // 缩放内层高度测量：桌布缩放后占位高度 = 布局高 × scale（随内容变化重测）
+  const scaleInnerRef = useRef<HTMLDivElement>(null);
+  const [innerH, setInnerH] = useState(0);
+  useEffect(() => {
+    if (!isMobile) {
+      setInnerH(0);
+      return;
+    }
+    const el = scaleInnerRef.current;
+    if (!el) return;
+    const update = () => setInnerH(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isMobile, state]);
 
   const dispatch = useCallback(
     (a: Action) => {
@@ -282,35 +315,191 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }),
   }));
 
-  return (
-    <div className="game">
-      <div className="game-header">
-        <div className="game-title">换牌王</div>
-        <div className="game-status">
-          <span className="badge">{PHASE_LABEL[state.phase]}</span>
-          {state.declaredPlayer !== null && (
-            <span className="badge badge-declared">{state.players[state.declaredPlayer].name} 已定牌</span>
-          )}
-          <span className="badge">牌堆剩余 {deckCount} 张</span>
-        </div>
-        <div className="header-tools">
-          <button
-            className={`btn btn-small ${showRules ? 'btn-active' : ''}`}
-            onClick={() => setShowRules((v) => !v)}
-          >
-            规则
-          </button>
-          <button
-            className={`btn btn-small ${showLog ? 'btn-active' : ''}`}
-            onClick={() => setShowLog((v) => !v)}
-          >
-            记录
-          </button>
-        </div>
-        <button className="btn btn-small" onClick={onExit}>
-          退出
+  // 底部触控放大层对应座位：联机=自己，热座=当前行动玩家
+  const mySeatId = isOnline && online ? online.myId : state.currentPlayer;
+  const me = viewPlayers.find((p) => p.id === mySeatId);
+
+  // 弃牌按钮：所有真人座位整局常驻（对手弃牌时可立即跟弃反应）；发牌阶段无跟弃意义，不显示
+  const showDiscard = !me?.isBot && state.phase !== 'deal';
+
+  const headerContent = (
+    <div className="game-header">
+      <div className="game-title">换牌王</div>
+      <div className="game-status">
+        <span className="badge">{PHASE_LABEL[state.phase]}</span>
+        {state.declaredPlayer !== null && (
+          <span className="badge badge-declared">{state.players[state.declaredPlayer].name} 已定牌</span>
+        )}
+        <span className="badge badge-deck">牌堆剩余 {deckCount} 张</span>
+      </div>
+      <div className="header-tools">
+        <button
+          className={`btn btn-small ${showRules ? 'btn-active' : ''}`}
+          onClick={() => setShowRules((v) => !v)}
+        >
+          规则
+        </button>
+        <button
+          className={`btn btn-small ${showLog ? 'btn-active' : ''}`}
+          onClick={() => setShowLog((v) => !v)}
+        >
+          记录
         </button>
       </div>
+      <button className="btn btn-small" onClick={onExit}>
+        退出
+      </button>
+    </div>
+  );
+
+  const tableContent = (
+    <>
+      <div className="center-area">
+        <div className="deck-stub">
+          <div className="deck-stack" aria-hidden>
+            <div className="deck-card deck-card-1" />
+            <div className="deck-card deck-card-2" />
+            <div className="deck-card deck-card-3" />
+          </div>
+          <div className="deck-count">{deckCount} 张</div>
+        </div>
+        {/* "可跟弃"标签：始终固定在最新弃牌（黑框牌）正上方 */}
+        <DiscardPile state={state} />
+        <UsedPile state={state} />
+      </div>
+
+      <div className="seats">
+        {viewPlayers
+          .filter((vp) => !(isMobile && vp.id === mySeatId))
+          .map((vp) => {
+            const declared = state.declaredPlayer === vp.id;
+            return (
+              <PlayerSeat
+                key={vp.id}
+                player={vp}
+                isCurrent={vp.id === state.currentPlayer}
+                isDeclared={declared}
+                selectable={
+                  (selectableSelf && vp.id === state.currentPlayer) ||
+                  (selectableOther && vp.id !== state.currentPlayer)
+                }
+                onSlotClick={(slot) => handleSlotClick(vp.id, slot)}
+                showDiscard={!vp.isBot && state.phase !== 'deal' && state.phase !== 'end'}
+                onDiscard={(slot) => dispatch({ type: 'TRY_FOLLOW', playerId: vp.id, slot })}
+              />
+            );
+          })}
+      </div>
+    </>
+  );
+
+  // ---- 操作面板（桌面：game-main 内；移动端：底部触控层内） ----
+  const actionPanelEl = (
+    <ActionPanel
+      state={state}
+      dispatch={dispatch}
+      replaceMode={replaceMode}
+      setReplaceMode={setReplaceMode}
+      kDeciding={kDeciding}
+      setKDeciding={setKDeciding}
+      myId={isOnline && online ? online.myId : undefined}
+    />
+  );
+
+  // ---- 移动端底部触控放大层 ----
+  const mobileBottom = isMobile ? (
+    <div className="mobile-bottom">
+      {me && (
+        <div className="my-hand">
+          <div className="my-hand-label">
+            {me.avatar && <span className="avatar avatar-sm">{me.avatar}</span>}
+            {me.name} 的手牌
+            {state.phase === 'deal' && !state.dealConfirmed[mySeatId] && !me.isBot && (
+              <span className="badge">看牌中</span>
+            )}
+          </div>
+          <div className="my-hand-slots">
+            {me.slots.map((s, i) => (
+              <div className="card-slot" key={i}>
+                <CardView
+                  card={s.card}
+                  known={s.known}
+                  onClick={s.card ? () => handleSlotClick(mySeatId, i) : undefined}
+                  selectable={
+                    ((selectableSelf && mySeatId === state.currentPlayer) ||
+                      (selectableOther && mySeatId !== state.currentPlayer)) &&
+                    !!s.card
+                  }
+                  highlight={mySeatId === state.currentPlayer}
+                />
+                {showDiscard && s.card && (
+                  <button
+                    className="discard-btn"
+                    onClick={() => dispatch({ type: 'TRY_FOLLOW', playerId: mySeatId, slot: i })}
+                  >
+                    弃
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {selectableOther && (
+        <div className="pick-other">
+          <div className="pick-other-label">选择对方的一张牌：</div>
+          {viewPlayers
+            .filter((p) => p.id !== mySeatId)
+            .map((p) => (
+              <div className="pick-other-row" key={p.id}>
+                <span className="avatar avatar-sm">{p.avatar}</span>
+                <span>{p.name}</span>
+                {[0, 1, 2, 3].map((slot) => (
+                  <button
+                    key={slot}
+                    className="btn btn-small"
+                    onClick={() => dispatch({ type: 'PICK_OTHER', playerId: p.id, slot })}
+                  >
+                    第{slot + 1}张
+                  </button>
+                ))}
+              </div>
+            ))}
+        </div>
+      )}
+      {actionPanelEl}
+    </div>
+  ) : null;
+
+  return (
+    <div className={`game ${isMobile ? 'game-mobile' : ''}`}>
+      {headerContent}
+
+      {isMobile ? (
+        /* 移动端：桌布按 1080 设计宽布局后整体缩放铺满屏宽，高度占位按缩放后实际值 */
+        <div className="scale-outer" style={{ height: innerH * scale }}>
+          <div
+            className="scale-inner"
+            ref={scaleInnerRef}
+            style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}
+          >
+            <div className="table">{tableContent}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="game-main">
+          <div className="table">{tableContent}</div>
+          {actionPanelEl}
+          {showLog && <LogPanel state={state} />}
+        </div>
+      )}
+
+      {mobileBottom}
+
+      {/* 动画层放在 transform 之外：移动端不随桌布缩放，保持正常尺寸 */}
+      <SwapAnim lastSwap={state.lastSwap} players={state.players} />
+      <MoveAnim lastMove={state.lastMove} lastPenalty={state.lastPenalty} players={state.players} />
+      <PeekAnim lastViewed={state.lastViewed} mySeat={isOnline && online ? online.myId : undefined} />
 
       {showRules && (
         <div className="rules-panel">
@@ -325,65 +514,6 @@ export default function GameScreen({ config, online, onExit }: Props) {
           </ul>
         </div>
       )}
-
-      <div className="game-main">
-        <div className="table">
-          <div className="center-area">
-            <div className="deck-stub">
-              <div className="deck-stack" aria-hidden>
-                <div className="deck-card deck-card-1" />
-                <div className="deck-card deck-card-2" />
-                <div className="deck-card deck-card-3" />
-              </div>
-              <div className="deck-count">{deckCount} 张</div>
-            </div>
-            {/* "可跟弃"标签：始终固定在最新弃牌（黑框牌）正上方 */}
-            <DiscardPile state={state} />
-            <UsedPile state={state} />
-          </div>
-
-          <div className="seats">
-            {viewPlayers.map((vp) => {
-              const declared = state.declaredPlayer === vp.id;
-              // 弃牌按钮：所有真人座位整局常驻（对手弃牌时可立即跟弃反应）；
-              // 发牌/结算阶段无跟弃意义，不显示
-              const showDiscard =
-                !vp.isBot && state.phase !== 'deal' && state.phase !== 'end';
-              return (
-                <PlayerSeat
-                  key={vp.id}
-                  player={vp}
-                  isCurrent={vp.id === state.currentPlayer}
-                  isDeclared={declared}
-                  selectable={
-                    (selectableSelf && vp.id === state.currentPlayer) ||
-                    (selectableOther && vp.id !== state.currentPlayer)
-                  }
-                  onSlotClick={(slot) => handleSlotClick(vp.id, slot)}
-                  showDiscard={showDiscard}
-                  onDiscard={(slot) => dispatch({ type: 'TRY_FOLLOW', playerId: vp.id, slot })}
-                />
-              );
-            })}
-          </div>
-        </div>
-
-        <SwapAnim lastSwap={state.lastSwap} players={state.players} />
-        <MoveAnim lastMove={state.lastMove} lastPenalty={state.lastPenalty} players={state.players} />
-        <PeekAnim lastViewed={state.lastViewed} mySeat={isOnline && online ? online.myId : undefined} />
-
-        <ActionPanel
-          state={state}
-          dispatch={dispatch}
-          replaceMode={replaceMode}
-          setReplaceMode={setReplaceMode}
-          kDeciding={kDeciding}
-          setKDeciding={setKDeciding}
-          myId={isOnline && online ? online.myId : undefined}
-        />
-
-        {showLog && <LogPanel state={state} />}
-      </div>
     </div>
   );
 }
