@@ -345,10 +345,10 @@ export default function GameScreen({ config, online, onExit }: Props) {
           <div className="seats">
             {viewPlayers.map((vp) => {
               const declared = state.declaredPlayer === vp.id;
-              // 弃牌按钮：仅自己（联机=本人座位；热座=当前行动玩家）座位整局常驻，跟弃时点自己同分手牌即可；对手牌下不显示
-              const mySeatId = isOnline && online ? online.myId : state.currentPlayer;
+              // 弃牌按钮：联机=仅自己座位；热座=所有真人座位（共用屏幕，任何真人随时可跟弃）；持续显示
               const showDiscard =
-                vp.id === mySeatId && !vp.isBot && state.phase !== 'deal' && state.phase !== 'end';
+                (isOnline ? vp.id === (online && online.myId) : !vp.isBot) &&
+                state.phase !== 'deal' && state.phase !== 'end';
               return (
                 <PlayerSeat
                   key={vp.id}
