@@ -172,11 +172,13 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // ---- 跟弃窗口倒计时（显示剩余秒数，点放弃可提前关闭） ----
   useEffect(() => {
     if (state.phase !== 'follow' || !state.follow) {
+      followStartRef.current = null;
       setGaveUp(false);
       setFollowLeft(0);
       return;
     }
     const iv = setInterval(() => {
+      if (followStartRef.current === null) followStartRef.current = Date.now();
       const start = followStartRef.current ?? Date.now();
       const rem = Math.max(0, Math.ceil((FOLLOW_WINDOW_MS - (Date.now() - start)) / 1000));
       setFollowLeft(rem);

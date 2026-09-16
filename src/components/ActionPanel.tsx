@@ -179,18 +179,18 @@ export default function ActionPanel({
           <p className="hint">请选择处理方式：</p>
           <div className="btn-row">
             {canAbility && (
-              <button className="btn btn-primary" onClick={() => dispatch({ type: 'USE_ABILITY' })}>
-                发动功能
+              <button className="btn btn-ability" onClick={() => dispatch({ type: 'USE_ABILITY' })}>
+                ⚡ 发动功能
               </button>
             )}
-            <button className="btn btn-primary" onClick={() => dispatch({ type: 'DISCARD_DRAWN' })}>
-              直接弃牌
+            <button className="btn btn-discard" onClick={() => dispatch({ type: 'DISCARD_DRAWN' })}>
+              ✕ 直接弃牌
             </button>
             <button
-              className={replaceMode ? 'btn btn-active' : 'btn'}
+              className={replaceMode ? 'btn btn-active btn-replace' : 'btn btn-replace'}
               onClick={() => setReplaceMode(!replaceMode)}
             >
-              替换手牌
+              ⇄ 替换手牌
             </button>
           </div>
           {replaceMode && <p className="hint">请点击你手牌中要替换的牌</p>}
@@ -206,12 +206,12 @@ export default function ActionPanel({
       <div className="action-panel">
         <p className="hint">轮到 {current.name}</p>
         <div className="btn-row">
-          <button className="btn btn-primary" onClick={() => dispatch({ type: 'DRAW' })}>
-            摸牌
-          </button>
+            <button className="btn btn-primary btn-draw" onClick={() => dispatch({ type: 'DRAW' })}>
+              ＋ 摸牌
+            </button>
           {state.phase === 'playing' && state.declaredPlayer === null && (
-            <button className="btn" onClick={() => dispatch({ type: 'DECLARE' })}>
-              宣布定牌
+            <button className="btn btn-declare" onClick={() => dispatch({ type: 'DECLARE' })}>
+              ⚑ 宣布定牌
             </button>
           )}
         </div>

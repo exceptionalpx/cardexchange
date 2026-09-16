@@ -112,7 +112,7 @@ describe('GameScreen 发牌阶段信息隐藏', () => {
     expect(backCount()).toBe(8); // 玩家1 盖牌后背面 + 机器人2 背面
 
     // 兜底：机器人自动确认进入 playing 后，所有座位仍保持背面
-    await waitFor(() => expect(screen.queryByText('摸牌')).toBeTruthy(), { timeout: 2000 });
+    await waitFor(() => expect(screen.queryByText('＋ 摸牌')).toBeTruthy(), { timeout: 2000 });
     expect(faceLabels().length).toBe(0);
     expect(backCount()).toBe(8);
   });

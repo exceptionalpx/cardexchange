@@ -1210,3 +1210,14 @@ body {
 .anim-layer-passive {
   pointer-events: none;
 }
+/* ---------- 操作按钮差异化：符号 + 颜色 ---------- */
+.btn-draw { font-size: 16px; font-weight: 700; }
+.btn-ability { background: #8b5cf6; border-color: #8b5cf6; color: #fff; font-weight: 600; }
+.btn-ability:hover { background: #a78bfa; }
+.btn-discard { background: #ef5350; border-color: #ef5350; color: #fff; font-weight: 600; }
+.btn-discard:hover { background: #f4776f; }
+.btn-replace { background: #26a69a; border-color: #26a69a; color: #fff; font-weight: 600; }
+.btn-replace:hover { background: #4db6ac; }
+.btn-active.btn-replace { background: #ff8a3d; border-color: #ff8a3d; color: #3a1600; }
+.btn-declare { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 700; margin-left: auto; }
+.btn-declare:hover { background: #f87171; }
