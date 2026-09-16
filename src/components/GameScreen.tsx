@@ -40,7 +40,7 @@ const PHASE_LABEL: Record<GameState['phase'], string> = {
 };
 
 const REVEAL_MS = 5000; // 翻看展示限时
-const FOLLOW_WINDOW_MS = 4000; // 跟弃窗口固定时长
+const FOLLOW_WINDOW_MS = 3000; // 跟弃窗口固定时长（3 秒：反应+回忆刚好，点放弃可提前关闭）
 /** 热座/单机多局累计积分（localStorage，按真人玩家名累计） */
 const TOTAL_KEY = 'cardexchange-total-scores';
 
@@ -88,6 +88,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // 热座/单机多局累计（本地 localStorage）
   const [localTotals, setLocalTotals] = useState<{ games: number; scores: Record<string, number> } | null>(null);
   const scoredRef = useRef(false);
+  // 跟弃窗口剩余秒数（倒计时显示）
+  const [followLeft, setFollowLeft] = useState(0);
 
   // 联机：状态来自服务器视图；本地：内部 reducer
   const state = isOnline && online ? (online.view as unknown as GameState) : localState;
@@ -164,6 +166,20 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }, remaining);
     return () => clearTimeout(t);
   }, [state.phase, state.follow, isOnline]);
+
+  // ---- 跟弃窗口倒计时（显示剩余秒数，点放弃可提前关闭） ----
+  useEffect(() => {
+    if (state.phase !== 'follow' || !state.follow) {
+      setFollowLeft(0);
+      return;
+    }
+    const iv = setInterval(() => {
+      const start = followStartRef.current ?? Date.now();
+      const rem = Math.max(0, Math.ceil((FOLLOW_WINDOW_MS - (Date.now() - start)) / 1000));
+      setFollowLeft(rem);
+    }, 200);
+    return () => clearInterval(iv);
+  }, [state.phase, state.follow]);
 
   // ---- 翻看（7/8、9/10）5 秒限时：到点自动收起（联机也由客户端主动提交，服务器兜底） ----
   useEffect(() => {
@@ -244,6 +260,22 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }
   }
 
+  // ---- 跟弃窗口：放弃（联机=放弃自己；热座=全体真人放弃，提前关闭窗口） ----
+  const passFollowAll = useCallback(() => {
+    if (!state.follow) return;
+    if (isOnline && online) {
+      dispatch({ type: 'PASS_FOLLOW', playerId: online.myId });
+      return;
+    }
+    let ns = state;
+    for (const [idStr, d] of Object.entries(state.follow.decisions)) {
+      const id = Number(idStr);
+      if (d === 'pending' && !state.players[id].isBot) {
+        ns = applyAction(ns, { type: 'PASS_FOLLOW', playerId: id });
+      }
+    }
+    setLocalState(ns);
+  }, [state, isOnline, online, dispatch]);
   if (state.phase === 'end') {
     // 热座本地累计 → 按玩家 id 对齐
     let localScores: Record<number, number> | null = null;
@@ -328,6 +360,14 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
       <div className="game-main">
         <div className="table">
+          {state.phase === 'follow' && state.follow && (
+            <div className="follow-bar">
+              <span className="follow-timer">可跟弃 · {followLeft}s</span>
+              <button className="btn btn-small" onClick={passFollowAll}>
+                放弃
+              </button>
+            </div>
+          )}
           <div className="center-area">
             <div className="deck-stub">
               <div className="deck-stack" aria-hidden>

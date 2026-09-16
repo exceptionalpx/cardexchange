@@ -60,10 +60,6 @@ function addPenaltyCard(
   return { player: { ...p, handSlots: slots }, deck: rest, got: card, slot: idx >= 0 ? idx : slots.length - 1 };
 }
 
-/** 玩家是否持有指定分数的牌 */
-function hasScore(p: PlayerState, target: number): boolean {
-  return p.handSlots.some((c) => c !== null && scoreOf(c) === target);
-}
 
 function playerName(state: GameState, id: number): string {
   return state.players[id].name;
@@ -191,8 +187,9 @@ export function canApply(state: GameState, action: Action): boolean {
     case 'KEEP':
       return state.pending?.kind === 'confirmReveal';
     case 'TRY_FOLLOW': {
-      // 点击"弃"按钮 = 尝试跟弃；除发牌/结算外任何时机都允许，引擎判定成败（失败惩罚补牌）
-      if (state.phase === 'deal' || state.phase === 'end') return false;
+      // 点击“弃”按钮：仅在跟弃窗口内且自己待决策时有效；窗口外点击无响应（不罚牌）
+      if (state.phase !== 'follow' || !state.follow) return false;
+      if (state.follow.decisions[action.playerId] !== 'pending') return false;
       if (state.pending !== null) return false; // 有挂起交互时不响应
       const me = state.players[action.playerId];
       return action.slot >= 0 && action.slot < me.handSlots.length && me.handSlots[action.slot] !== null;
@@ -586,25 +583,10 @@ function afterDiscard(state: GameState, discarded: Card): GameState {
   const score = scoreOf(discarded);
   const discarder = state.currentPlayer;
   const decisions: Record<number, FollowDecision> = {};
-  let hasPending = false;
-
-  // 弃牌者本人也可参与跟弃（允许一回合内连弃两张同分牌）
+  // 每次弃牌都开启跟弃窗口：所有玩家（含弃牌者本人）均可尝试，点错/抢慢由引擎判定并惩罚
   for (const p of state.players) {
-    if (hasScore(p, score)) {
-      decisions[p.id] = 'pending';
-      hasPending = true;
-    } else {
-      decisions[p.id] = 'pass';
-    }
+    decisions[p.id] = 'pending';
   }
-
-  if (!hasPending) {
-    return endTurn({
-      ...state,
-      log: [...state.log, log(state, discarder, `${playerName(state, discarder)} 弃掉了 ${cardLabel(discarded)}`)],
-    });
-  }
-
   const follow: FollowState = { discarder, targetScore: score, decisions, submitted: [] };
   return {
     ...state,

@@ -1193,3 +1193,16 @@ body {
     display: none;
   }
 }
+/* ---- 跟弃窗口提示条：倒计时 + 放弃按钮 ---- */
+.follow-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.follow-timer {
+  color: #f5c518;
+  font-weight: 700;
+  font-size: 14px;
+}

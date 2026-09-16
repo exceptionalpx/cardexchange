@@ -218,7 +218,7 @@ function schedule(room: Room): void {
             scoreIfEnded(room);
             broadcastView(room);
           }
-        }, 4000),
+        }, 3000),
       );
     }
   }

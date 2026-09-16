@@ -127,13 +127,23 @@ describe('定牌与终局', () => {
     expect(s.currentPlayer).toBe(1);
     expect(s.finalRemaining).toBe(2);
 
-    // P1 摸牌（普通牌 5）→ 弃掉
+    // P1 摸牌（普通牌 5）→ 弃掉（每次弃牌都开窗口，全员 PASS 后轮到 P2）
     s = applyAction(s, { type: 'DRAW' });
     expect(s.pending?.kind).toBe('drawn');
     s = applyAction(s, { type: 'DISCARD_DRAWN' });
-    // P2 摸牌（6）→ 弃掉（无同分 → 回合推进，final 结束 → 结算）
+    expect(s.phase).toBe('follow');
+    s = applyAction(s, { type: 'PASS_FOLLOW', playerId: 0 });
+    s = applyAction(s, { type: 'PASS_FOLLOW', playerId: 1 });
+    s = applyAction(s, { type: 'PASS_FOLLOW', playerId: 2 });
+    expect(s.phase).toBe('final');
+    expect(s.currentPlayer).toBe(2);
+    // P2 摸牌（6）→ 弃掉（每次弃牌都开窗口，全员 PASS 后 final 结束 → 结算）
     s = applyAction(s, { type: 'DRAW' });
     s = applyAction(s, { type: 'DISCARD_DRAWN' });
+    expect(s.phase).toBe('follow');
+    s = applyAction(s, { type: 'PASS_FOLLOW', playerId: 0 });
+    s = applyAction(s, { type: 'PASS_FOLLOW', playerId: 1 });
+    s = applyAction(s, { type: 'PASS_FOLLOW', playerId: 2 });
     expect(s.phase).toBe('end');
     expect(s.winner).toEqual([2]); // P2 总分 4 最低
     expect(s.players[0].score).toBe(10);
@@ -199,7 +209,12 @@ describe('摸牌与处理', () => {
     expect(g.discardPile).toContainEqual(card('K'));
     expect(g.players[0].knowledge[card('A').id]).toEqual(card('A'));
     expect(g.players[0].knowledge[card('K').id]).toBeUndefined();
-    // P1 无 K → 无跟弃，回合推进
+    // 每次弃牌都开跟弃窗口（全员待决策）；无人跟弃时全部 PASS 后回合推进
+    expect(g.phase).toBe('follow');
+    expect(g.follow?.decisions[0]).toBe('pending');
+    expect(g.follow?.decisions[1]).toBe('pending');
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 0 });
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 1 });
     expect(g.phase).toBe('playing');
     expect(g.currentPlayer).toBe(1);
   });
@@ -438,7 +453,7 @@ describe('跟弃', () => {
     g = applyAction(g, { type: 'DISCARD_DRAWN' });
     expect(g.phase).toBe('follow');
     expect(g.follow?.decisions[1]).toBe('pending');
-    expect(g.follow?.decisions[2]).toBe('pass');
+    expect(g.follow?.decisions[2]).toBe('pending');
     // 日志不出现"触发跟弃"提示，是否跟弃由玩家自行判断
     expect(g.log.some((e) => e.text.includes('触发跟弃'))).toBe(false);
     expect(g.log.some((e) => e.text.includes('弃掉了'))).toBe(true);
@@ -446,7 +461,10 @@ describe('跟弃', () => {
     g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 0 });
     expect(g.players[1].handSlots[0]).toBeNull();
     expect(g.discardPile).toContainEqual(card('10'));
-    expect(g.phase).toBe('playing'); // 唯一 pending 决策完，窗口关闭
+    expect(g.phase).toBe('follow'); // P0/P2 仍待决策
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 0 });
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 2 });
+    expect(g.phase).toBe('playing'); // 全部决策完，窗口关闭
   });
 
   it('多人抢弃：先提交者成功，后提交者失败补牌', () => {
@@ -466,6 +484,8 @@ describe('跟弃', () => {
     // P2 后提交 → 失败，补 1 张（9 进空槽）
     g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 2, slot: 0 });
     expect(g.players[2].handSlots).toContainEqual(card('9'));
+    expect(g.phase).toBe('follow'); // 弃牌者 P0 仍待决策
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 0 });
     expect(g.phase).toBe('playing');
     expect(g.players[2].knowledge[card('9').id]).toBeUndefined(); // 盲摸不知道
   });
@@ -485,10 +505,12 @@ describe('跟弃', () => {
     expect(g.players[1].handSlots).toContainEqual(card('9'));
     expect(g.players[1].handSlots[0]).toEqual(card('10')); // 同分牌未弃
     expect(g.log.some((e) => e.text.includes('跟弃失败'))).toBe(true);
-    expect(g.phase).toBe('playing'); // 唯一 pending 已决策，窗口关闭
+    expect(g.phase).toBe('follow'); // 弃牌者 P0 仍待决策
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 0 });
+    expect(g.phase).toBe('playing'); // 全部决策完，窗口关闭
   });
 
-  it('窗口期外（平时）点击"弃"按钮：跟弃失败惩罚补牌，回合状态不变', () => {
+  it('窗口期外（平时）点击"弃"按钮：无响应、不罚牌、回合不变', () => {
     const s = makeGame(
       [
         [card('A'), card('2'), card('3'), card('4')], // P0 回合开始（无 pending）
@@ -496,9 +518,10 @@ describe('跟弃', () => {
       ],
       { deck: [card('9')] },
     );
-    // 没有跟弃窗口时点击 → 失败 + 补 1 张
-    let g = applyAction(s, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 });
-    expect(g.players[0].handSlots).toContainEqual(card('9'));
+    // 没有跟弃窗口时点击 → 无响应（不罚牌）
+    const g = applyAction(s, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 });
+    expect(g).toBe(s); // 状态完全不变
+    expect(g.players[0].handSlots).not.toContainEqual(card('9'));
     expect(g.phase).toBe('playing');
     expect(g.currentPlayer).toBe(0); // 回合不推进
     expect(g.pending).toBeNull();
@@ -516,6 +539,9 @@ describe('跟弃', () => {
     let g = applyAction(s, { type: 'DRAW' });
     g = applyAction(g, { type: 'DISCARD_DRAWN' });
     g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 1 });
+    expect(g.phase).toBe('follow'); // P0/P2 仍待决策
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 0 });
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 2 });
     expect(g.phase).toBe('playing');
     expect(g.players[1].handSlots[0]).toEqual(card('10')); // 未弃
   });
@@ -533,6 +559,7 @@ describe('跟弃', () => {
     g = applyAction(g, { type: 'DISCARD_DRAWN' });
     g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 0 });
     g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 2 });
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 0 });
     expect(g.phase).toBe('playing'); // 直接进入下一回合，无新窗口
   });
 
@@ -561,11 +588,13 @@ describe('跟弃', () => {
     // 弃牌者 P0 也进入 pending（可跟弃自己）
     expect(g.phase).toBe('follow');
     expect(g.follow?.decisions[0]).toBe('pending');
-    expect(g.follow?.decisions[1]).toBe('pass');
+    expect(g.follow?.decisions[1]).toBe('pending');
     // P0 点击自己手牌中的同分 10 → 跟弃成功，连弃两张
     g = applyAction(g, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 });
     expect(g.players[0].handSlots[0]).toBeNull();
     expect(g.discardPile.filter((c) => c.rank === '10')).toHaveLength(2);
+    expect(g.phase).toBe('follow'); // P1 仍待决策
+    g = applyAction(g, { type: 'PASS_FOLLOW', playerId: 1 });
     expect(g.phase).toBe('playing');
   });
 });
