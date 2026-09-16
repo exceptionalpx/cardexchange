@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import MenuScreen from './components/MenuScreen';
 import GameScreen from './components/GameScreen';
 import OnlineFlow from './components/OnlineFlow';
+import { loadAvatar } from './components/AvatarPicker';
 
 export interface GameConfigUI {
   playerCount: number;
@@ -20,34 +20,19 @@ export interface GameConfigUI {
   guided?: boolean;
 }
 
-type Screen = 'home' | 'local';
-
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('home');
-  const [config, setConfig] = useState<GameConfigUI | null>(null);
+  // 教学局：唯一本地入口（不联网，固定剧本教学）
+  const [guidedCfg, setGuidedCfg] = useState<GameConfigUI | null>(null);
 
-  if (screen === 'local' && config) {
-    return <GameScreen config={config} onExit={() => setScreen('home')} />;
+  if (guidedCfg) {
+    return <GameScreen config={guidedCfg} onExit={() => setGuidedCfg(null)} />;
   }
-  if (screen === 'local') {
-    return (
-      <MenuScreen
-        onStart={(cfg) => {
-          setConfig(cfg);
-          setScreen('local');
-        }}
-        onBack={() => setScreen('home')}
-      />
-    );
-  }
-  // 主页 = 联机大厅（创建/加入房间为主入口，热座/引导为次级入口）
+  // 主页 = 联机大厅（创建/加入房间为主入口，教学局为次级入口）
   return (
     <OnlineFlow
-      onLocal={() => setScreen('local')}
-      onGuided={() => {
-        setConfig({ playerCount: 2, botCount: 1, guided: true, botMemory: 0.4 });
-        setScreen('local');
-      }}
+      onGuided={() =>
+        setGuidedCfg({ playerCount: 2, botCount: 1, guided: true, botMemory: 0.4, avatars: [loadAvatar()] })
+      }
     />
   );
 }

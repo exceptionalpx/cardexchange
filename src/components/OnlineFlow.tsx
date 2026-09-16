@@ -8,8 +8,6 @@ import GameScreen from './GameScreen';
 import { loadAvatar } from './AvatarPicker';
 
 interface Props {
-  /** 切到本地模式（热座配置页） */
-  onLocal: () => void;
   /** 直接开始引导局（固定剧本 + 新手机器人） */
   onGuided: () => void;
 }
@@ -19,7 +17,7 @@ interface SavedSession {
   playerId: number;
   name: string;
 }
-export default function OnlineFlow({ onLocal, onGuided }: Props) {
+export default function OnlineFlow({ onGuided }: Props) {
   const netRef = useRef<Net | null>(null);
   const [net, setNet] = useState<Net | null>(null);
   const [inGame, setInGame] = useState(false);
@@ -116,8 +114,8 @@ export default function OnlineFlow({ onLocal, onGuided }: Props) {
         <h1 className="menu-title">联机对战</h1>
         <p className="hint hint-error">{connectError}</p>
         <div className="menu-actions">
-          <button className="btn btn-big" onClick={onLocal}>
-            本地模式
+          <button className="btn btn-big" onClick={onGuided}>
+            🎓 引导局（本地教学）
           </button>
         </div>
       </div>
@@ -151,5 +149,5 @@ export default function OnlineFlow({ onLocal, onGuided }: Props) {
     );
   }
 
-  return <LobbyScreen net={net} onEnterGame={() => setInGame(true)} onLocal={onLocal} onGuided={onGuided} />;
+  return <LobbyScreen net={net} onEnterGame={() => setInGame(true)} onGuided={onGuided} />;
 }

@@ -29,11 +29,10 @@ interface Props {
   /** 服务器下发 gameStart（对局开始），切换到牌桌 */
   onEnterGame: () => void;
   /** 热座模式（本地配置页） */
-  onLocal: () => void;
   /** 引导局（直接开始教学对局） */
   onGuided: () => void;
 }
-export default function LobbyScreen({ net, onEnterGame, onLocal, onGuided }: Props) {
+export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
   const [name, setName] = useState(() => localStorage.getItem('cardexchange-name') ?? '');
   const [avatar, setAvatar] = useState(loadAvatar());
   const [joinCode, setJoinCode] = useState('');
@@ -372,9 +371,6 @@ export default function LobbyScreen({ net, onEnterGame, onLocal, onGuided }: Pro
         </div>
       </div>
       <div className="menu-actions menu-actions-sub">
-        <button className="btn" onClick={onLocal}>
-          👥 热座模式（本地）
-        </button>
         <button className="btn" onClick={onGuided}>
           🎓 引导局（新手教学）
         </button>
