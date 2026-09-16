@@ -127,3 +127,48 @@ describe('aiDecide', () => {
     }
   });
 });
+
+  it('记忆误差（新手 0.4）下 AI 决策全程合法并正常终局', () => {
+    let s = createGame({ playerCount: 3, botCount: 2, botMemory: 0.4 });
+    let guard = 0;
+    let seed = 0.123;
+    const rng = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    while (s.phase !== 'end' && guard < 500) {
+      guard++;
+      const actor =
+        s.phase === 'deal'
+          ? s.currentPlayer
+          : s.phase === 'follow' && s.follow
+            ? Number(Object.entries(s.follow.decisions).find(([, d]) => d === 'pending')?.[0] ?? s.currentPlayer)
+            : s.currentPlayer;
+      const action = aiDecide(s, actor, rng);
+      expect(canApply(s, action), `阶段 ${s.phase} 动作 ${JSON.stringify(action)}`).toBe(true);
+      s = applyAction(s, action);
+    }
+    expect(s.phase).toBe('end');
+    expect(s.winner!.length).toBeGreaterThan(0);
+  });
+
+  it('记忆误差（新手 0.4）会让 AI 忘记看过的牌（出现保守决策）', () => {
+    // 手牌全 A（均分 1，完美记忆下必然定牌）；botMemory=1 时必然遗忘 → 摸牌
+    const s = makeState([
+      [card('A'), card('A'), card('A'), card('A')],
+      [card('K'), card('Q'), card('J'), card('10')],
+    ]);
+    s.botMemory = 1; // 极端：每次决策 100% 遗忘
+    const action = aiDecide(s, 0, () => 0.1);
+    expect(action.type).toBe('DRAW'); // 因遗忘而不敢定牌
+  });
+
+  it('高手（0 记忆误差）决策与完美记忆一致', () => {
+    const s = makeState([
+      [card('A'), card('A'), card('A'), card('A')],
+      [card('K'), card('Q'), card('J'), card('10')],
+    ]);
+    s.botMemory = 0;
+    const action = aiDecide(s, 0, () => 0.9);
+    expect(action.type).toBe('DECLARE');
+  });
