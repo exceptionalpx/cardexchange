@@ -291,7 +291,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
           {state.declaredPlayer !== null && (
             <span className="badge badge-declared">{state.players[state.declaredPlayer].name} 已定牌</span>
           )}
-          <span className="badge badge-deck">牌堆剩余 {deckCount} 张</span>
+          <span className="badge">牌堆剩余 {deckCount} 张</span>
         </div>
         <div className="header-tools">
           <button
