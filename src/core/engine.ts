@@ -143,7 +143,18 @@ function buildGuidedDeck(deck: Card[], count: number): Card[] {
   const ordered = picks as Card[]; // 顺序即 7,9,J,K
   const head = rest.slice(0, count * 4); // 初始发牌区
   const tail = rest.slice(count * 4); // 摸牌区
-  return [...head, ...ordered, ...tail];
+  // 回合交替下玩家 0 每隔 count 张摸 1 次：把教学牌放到玩家 0 的摸牌位置
+  const out: Card[] = [];
+  let ti = 0;
+  for (let idx = 0; idx < tail.length + 4; idx++) {
+    if (idx % count === 0 && idx / count < 4) {
+      out.push(ordered[idx / count]);
+    } else {
+      out.push(tail[ti]);
+      ti++;
+    }
+  }
+  return [...head, ...out];
 }
 
 // ---------- 校验 ----------

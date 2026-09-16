@@ -1,7 +1,7 @@
 // 规则引擎测试：发牌/定牌/摸牌/弃牌/替换/功能牌/跟弃/结算/非法操作
 import { describe, expect, it } from 'vitest';
 import { applyAction, canApply, createGame, settle } from '../src/core/engine';
-import { scoreOf } from '../src/core/score';
+import { handScore, scoreOf } from '../src/core/score';
 import type { Card, GameState } from '../src/core/types';
 function card(rank: Card['rank'], suit: Card['suit'] = 'spades'): Card {
   const prefix: Record<string, string> = {
@@ -25,6 +25,9 @@ function makeGame(
     declaredPlayer?: number | null;
     pending?: GameState['pending'];
     discardPile?: Card[];
+    allowSelfFollow?: boolean;
+    declareBonus?: boolean;
+    declaredDeckCount?: number;
   } = {},
 ): GameState {
   const players = hands.map((hand, i) => {
@@ -50,9 +53,9 @@ function makeGame(
     animSeq: 0,
     finalRemaining: 0,
     winner: null,
-    declaredDeckCount: undefined,
-    allowSelfFollow: true,
-    declareBonus: false,
+    declaredDeckCount: opts.declaredDeckCount,
+    allowSelfFollow: opts.allowSelfFollow ?? true,
+    declareBonus: opts.declareBonus ?? false,
     botMemory: 0,
     log: [],
   };
@@ -827,5 +830,140 @@ describe('lastMove 动画数据', () => {
     g = applyAction(g, { type: 'PICK_OTHER', playerId: 1, slot: 1 });
     expect(g.lastViewed).toMatchObject({ actor: 0, targetPlayer: 1, targetSlot: 1 });
     expect(g.pending?.kind).toBe('confirmReveal');
+  });
+});
+
+describe('定牌奖励（两档占比）', () => {
+  function declaredGame(deckSize: number, playerCount: number, bonus: boolean) {
+    const hands = Array.from({ length: playerCount }, () => [
+      card('K'), card('Q'), card('J'), card('10'),
+    ]);
+    return makeGame(hands, {
+      deck: [],
+      declaredPlayer: 0,
+      declaredDeckCount: deckSize,
+      declareBonus: bonus,
+      phase: 'final',
+    });
+  }
+
+  it('2 人局：牌堆剩余 30（>=60%）减 2 分', () => {
+    const s = declaredGame(30, 2, true);
+    const ended = settle(s);
+    expect(ended.players[0].score).toBe(handScore(ended.players[0].handSlots) - 2);
+    expect(ended.winner).toContain(0);
+  });
+
+  it('2 人局：牌堆剩余 20（35%~60%）减 1 分', () => {
+    const s = declaredGame(20, 2, true);
+    const ended = settle(s);
+    expect(ended.players[0].score).toBe(handScore(ended.players[0].handSlots) - 1);
+  });
+
+  it('2 人局：牌堆剩余 10（<35%）无奖励', () => {
+    const s = declaredGame(10, 2, true);
+    const ended = settle(s);
+    expect(ended.players[0].score).toBe(handScore(ended.players[0].handSlots));
+  });
+
+  it('4 人局：牌堆剩余 23（>=60%）减 2 分', () => {
+    const s = declaredGame(23, 4, true);
+    const ended = settle(s);
+    expect(ended.players[0].score).toBe(handScore(ended.players[0].handSlots) - 2);
+  });
+
+  it('4 人局：牌堆剩余 14（35%~60%）减 1 分', () => {
+    const s = declaredGame(14, 4, true);
+    const ended = settle(s);
+    expect(ended.players[0].score).toBe(handScore(ended.players[0].handSlots) - 1);
+  });
+
+  it('未启用定牌奖励时无奖励', () => {
+    const s = declaredGame(30, 2, false);
+    const ended = settle(s);
+    expect(ended.players[0].score).toBe(handScore(ended.players[0].handSlots));
+  });
+
+  it('无定牌者（牌堆耗尽结算）不触发奖励', () => {
+    const s = makeGame(
+      [[card('A'), card('2'), card('3'), card('4')], [card('5'), card('6'), card('7'), card('8')]],
+      { deck: [], declaredPlayer: null, declaredDeckCount: 0, declareBonus: true, phase: 'playing' },
+    );
+    const ended = settle(s);
+    expect(ended.players[0].score).toBe(handScore(ended.players[0].handSlots));
+  });
+
+  it('奖励使同分并列变为定牌者独赢', () => {
+    const s = makeGame(
+      [[card('A'), card('A'), card('A'), card('A')], [card('A'), card('A'), card('A'), card('A')]],
+      { deck: [], declaredPlayer: 0, declaredDeckCount: 30, declareBonus: true, phase: 'final' },
+    );
+    const ended = settle(s);
+    expect(ended.winner).toEqual([0]); // 定牌者 -2 后分数更低，并列变独赢
+  });
+});
+
+describe('allowSelfFollow 开关', () => {
+  it('关闭时：弃牌者直接 pass，其他玩家可跟弃', () => {
+    const s = makeGame(
+      [[card('A'), card('2'), card('3'), card('4')], [card('5'), card('6'), card('7'), card('8')]],
+      { deck: [card('A'), card('5')], currentPlayer: 0, allowSelfFollow: false },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'DISCARD_DRAWN' });
+    expect(g.phase).toBe('follow');
+    expect(g.follow!.decisions[0]).toBe('pass'); // 弃牌者不可跟
+    expect(g.follow!.decisions[1]).toBe('pending'); // 其他玩家可跟
+    // 玩家 1 有同分 5？A=1 分，玩家 1 无 1 分牌 → 尝试跟弃失败罚牌
+    const after = applyAction(g, { type: 'TRY_FOLLOW', playerId: 1, slot: 0 });
+    expect(after.lastPenalty).not.toBeNull();
+  });
+
+  it('开启（默认）时：弃牌者也可跟弃（连弃两张同分）', () => {
+    const s = makeGame(
+      [[card('A'), card('A'), card('3'), card('4')], [card('5'), card('6'), card('7'), card('8')]],
+      { deck: [card('A')], currentPlayer: 0 },
+    );
+    let g = applyAction(s, { type: 'DRAW' });
+    g = applyAction(g, { type: 'DISCARD_DRAWN' }); // 弃 A(1 分)，玩家0 手牌还有 A
+    expect(g.follow!.decisions[0]).toBe('pending');
+    const after = applyAction(g, { type: 'TRY_FOLLOW', playerId: 0, slot: 0 });
+    expect(after.follow?.submitted).toContain(0); // 弃牌者跟弃自己成功
+  });
+});
+
+describe('引导局固定牌序', () => {
+  it('玩家 1 前 4 次摸牌依次为 7/9/J/K', () => {
+    const s = createGame({ playerCount: 2, botCount: 1, guided: true }, () => 0.5);
+    // 2 人局回合交替：玩家 0 的摸牌位置 = deck[0]/[2]/[4]/[6]
+    expect(s.deck[0].rank).toBe('7');
+    expect(s.deck[2].rank).toBe('9');
+    expect(s.deck[4].rank).toBe('J');
+    expect(s.deck[6].rank).toBe('K');
+    expect(countCards(s)).toBe(54);
+  });
+
+  it('引导局摸牌实际按剧本推进', () => {
+    let s = createGame({ playerCount: 2, botCount: 1, guided: true }, () => 0.5);
+    s = applyAction(s, { type: 'CONFIRM_DEAL', playerId: 0 });
+    const ranks: string[] = [];
+    let guard = 0;
+    while (ranks.length < 4 && guard < 60) {
+      guard++;
+      if (s.pending?.kind === 'drawn') {
+        if (s.currentPlayer === 0) ranks.push(s.pending.card.rank);
+        s = applyAction(s, { type: 'DISCARD_DRAWN' });
+      } else if (s.phase === 'follow' && s.follow) {
+        for (const id of Object.keys(s.follow.decisions)) {
+          const pid = Number(id);
+          if (s.follow!.decisions[pid] === 'pending') s = applyAction(s, { type: 'PASS_FOLLOW', playerId: pid });
+        }
+      } else if (s.phase === 'playing') {
+        s = applyAction(s, { type: 'DRAW' });
+      } else {
+        break;
+      }
+    }
+    expect(ranks).toEqual(['7', '9', 'J', 'K']);
   });
 });
