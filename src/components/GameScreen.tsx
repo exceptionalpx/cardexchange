@@ -93,6 +93,11 @@ export default function GameScreen({ config, online, onExit }: Props) {
           playerCount: config.playerCount,
           botCount: config.botCount,
           avatars: config.avatars,
+          followWindowMs: config.followWindowMs,
+          declareBonus: config.declareBonus,
+          allowSelfFollow: config.allowSelfFollow,
+          botMemory: config.botMemory,
+          guided: config.guided,
         })
       : (null as unknown as GameState),
   );
@@ -143,6 +148,11 @@ export default function GameScreen({ config, online, onExit }: Props) {
           playerCount: config.playerCount,
           botCount: config.botCount,
           avatars: config.avatars,
+          followWindowMs: config.followWindowMs,
+          declareBonus: config.declareBonus,
+          allowSelfFollow: config.allowSelfFollow,
+          botMemory: config.botMemory,
+          guided: config.guided,
         }),
       );
   }, [online, config]);

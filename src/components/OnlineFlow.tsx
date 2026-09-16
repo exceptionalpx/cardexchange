@@ -106,6 +106,8 @@ export default function OnlineFlow({ onLocal, onGuided }: Props) {
     localStorage.removeItem(ONLINE_KEY);
     netRef.current?.setResume(null);
     netRef.current?.close();
+    // 主页大厅常驻：退出房间/对局后重载页面，回到大厅（会话已清除，不会自动重连房间）
+    window.location.reload();
   }, []);
 
   if (connectError) {
