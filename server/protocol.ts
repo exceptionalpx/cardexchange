@@ -106,7 +106,8 @@ export type ClientMessage =
   | { type: 'leave' }
   | { type: 'exitGame' }
   | { type: 'watchRoom'; code: string }
-  | { type: 'watchLeave' };
+  | { type: 'watchLeave' }
+  | { type: 'checkSession'; code: string; playerId: number };
 
 export type ServerMessage =
   | {
@@ -149,4 +150,5 @@ export type ServerMessage =
   | { type: 'watchClosed'; message: string }
   | { type: 'roomClosed'; message: string }
   | { type: 'emoji'; from: number; emoji: string }
+  | { type: 'sessionCheck'; valid: boolean; message?: string }
   | { type: 'error'; message: string };

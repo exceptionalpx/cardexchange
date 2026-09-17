@@ -46,8 +46,10 @@ interface Props {
   initialRoom?: RoomView | null;
   /** 点击开放房间中"对局中"房间 → 进入观战 */
   onWatch: (code: string) => void;
+  /** 本地会话确认失效（服务器无此房间）→ 清除首页"回到对局"入口 */
+  onSessionInvalid: () => void;
 }
-export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initialRoom, onWatch }: Props) {
+export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initialRoom, onWatch, onSessionInvalid }: Props) {
   const [name, setName] = useState(() => localStorage.getItem('cardexchange-name') ?? '');
   const [avatar, setAvatar] = useState(loadAvatar());
   const [joinCode, setJoinCode] = useState('');
@@ -67,6 +69,8 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
   const myIdRef = useRef(-1);
+  const roomRef = useRef<RoomView | null>(null);
+  roomRef.current = room;
 
   function changeAvatar(v: string) {
     setAvatar(v);
@@ -141,11 +145,18 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
           break;
         case 'roomClosed':
           localStorage.removeItem(ONLINE_KEY);
+          onSessionInvalid();
           setRoom(null);
           setError(msg.message);
           break;
         case 'error':
           setError(msg.message);
+          // 死会话兜底：首页点击"回到对局"失败（房间不存在）→ 清除本地会话，隐藏入口并醒目提示
+          if (roomRef.current === null && msg.message.includes('房间不存在或座位无效')) {
+            localStorage.removeItem(ONLINE_KEY);
+            onSessionInvalid();
+            setError('之前的对局已结束（服务器重启后房间会清空），已清除记录');
+          }
           break;
       }
     });
@@ -156,6 +167,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   function leave() {
     net.send({ type: 'leave' });
     localStorage.removeItem(ONLINE_KEY);
+    onSessionInvalid();
     net.setResume(null);
     setRoom(null);
     setError(null);
@@ -283,6 +295,9 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
     <div className="menu lobby">
       <h1 className="menu-title">♠ 换牌王 ♥</h1>
       <p className="menu-sub">公网联机 · 创建房间后可添加机器人或等待朋友加入</p>
+
+      {/* 会话/操作错误：醒目横幅（首页顶部，替代底部小字） */}
+      {error && <div className="home-error-banner">⚠ {error}</div>}
 
       {/* ① 规则（详细全文，可展开/收起） */}
       <div className="menu-section">
@@ -469,7 +484,6 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
         </div>
       )}
 
-      {error && <p className="hint hint-error">{error}</p>}
     </div>
   );
 }

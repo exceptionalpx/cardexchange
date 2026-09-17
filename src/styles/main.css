@@ -1529,3 +1529,19 @@ body {
 .watch-screen .seat-slots .card-slot {
   min-width: 52px;
 }
+
+/* ===== 首页错误/提示醒目横幅（顶部，替代底部小字） ===== */
+.home-error-banner {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(200, 60, 50, 0.25);
+  border: 1px solid rgba(255, 120, 110, 0.55);
+  color: #ffc4bd;
+  font-size: 14px;
+  text-align: center;
+  font-weight: 600;
+  line-height: 1.5;
+}

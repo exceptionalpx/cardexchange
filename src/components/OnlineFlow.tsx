@@ -75,19 +75,22 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
         case 'exitGame':
           exitedRef.current = true;
           setInGame(false);
-          setPendingRoom({
-            code: msg.code,
-            seats: msg.seats,
-            canStart: msg.canStart,
-            hostId: msg.hostId,
-            myId: msg.playerId ?? 0,
-            totalScores: msg.totalScores ?? {},
-            gamesPlayed: msg.gamesPlayed ?? 0,
-            inGame: msg.inGame,
-          });
+          // 对局中退出 → 回首页（首页靠 savedSession 显示"回到对局"入口，不再停留房间等待页）
+          setPendingRoom(null);
+          break;
+        case 'sessionCheck':
+          // 首页会话校验：房间已不存在（服务器重启清空）→ 清除本地会话，隐藏"回到对局"死入口
+          if (!msg.valid) {
+            localStorage.removeItem(ONLINE_KEY);
+            setSavedSession(null);
+          }
           break;
         case 'joined':
           setHostId(msg.hostId);
+          // 本页面内新建/加入房间后同步会话：对局中退出回首页时"回到对局"入口指向最新房间
+          setSavedSession((prev) =>
+            prev ? { ...prev, code: msg.code, playerId: msg.playerId } : { code: msg.code, playerId: msg.playerId, name: '' },
+          );
           break;
         case 'roomUpdate':
           setHostId(msg.hostId);
@@ -113,6 +116,8 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
               name: saved.name,
               avatar: savedAvatar,
             }));
+            // 校验会话有效性：房间已不存在则清除（首页不显示"回到对局"死入口）
+            n.send({ type: 'checkSession', code: saved.code, playerId: saved.playerId });
           } catch {
             localStorage.removeItem(ONLINE_KEY);
           }
@@ -206,6 +211,7 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
       saved={savedSession}
       initialRoom={pendingRoom}
       onWatch={onWatch}
+      onSessionInvalid={() => setSavedSession(null)}
     />
   );
 }

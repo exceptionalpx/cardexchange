@@ -379,6 +379,18 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       }
       return;
     }
+    case 'checkSession': {
+      const code = msg.code.trim().toUpperCase();
+      const room = rooms.get(code);
+      const valid =
+        !!room && room.seats[msg.playerId] !== undefined && !room.seats[msg.playerId].isBot;
+      send(ws, {
+        type: 'sessionCheck',
+        valid,
+        message: valid ? undefined : '之前的对局已结束（服务器重启后房间会清空）',
+      });
+      return;
+    }
     case 'restart': {
       const meta = connMeta.get(ws);
       if (!meta) return;
