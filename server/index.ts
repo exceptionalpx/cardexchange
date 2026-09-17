@@ -94,18 +94,44 @@ const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 const rooms = new Map<string, Room>();
 // 连接 -> 所属 (roomCode, seatId)
 const connMeta = new WeakMap<WebSocket, { code: string; seatId: number }>();
-// 观战连接 -> 房间码（不占座位，只订阅全牌面对局广播）
-const watchMeta = new WeakMap<WebSocket, string>();
+// 观战连接 -> 房间码 + 昵称（不占座位，只订阅全牌面对局广播）
+const watchMeta = new WeakMap<WebSocket, { code: string; name?: string }>();
 
 function send(ws: WebSocket, msg: unknown): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
+/** 无真人延时关房（方案B）：对局中真人全退/全掉线后保留 60 秒等待重连，超时自动关闭 */
+function maybeCloseEmpty(room: Room): void {
+  const humans = room.seats.filter((s) => !s.isBot);
+  if (humans.some((s) => s.ws && s.ws.readyState === 1)) return;
+  if (room.closeTimer) return;
+  room.closeTimer = setTimeout(() => {
+    room.closeTimer = undefined;
+    // 期间可能有人重连/加入，再次确认
+    const h = room.seats.filter((s) => !s.isBot);
+    if (h.some((s) => s.ws && s.ws.readyState === 1)) return;
+    for (const w of room.watchers) send(w, { type: 'watchClosed', message: '房间已关闭（无真人玩家）' });
+    clearTimers(room);
+    rooms.delete(room.code);
+  }, 60000);
+  room.timers.add(room.closeTimer);
+}
+
+/** 有人重连/加入：取消延时关房 */
+function cancelClose(room: Room): void {
+  if (room.closeTimer) {
+    clearTimeout(room.closeTimer);
+    room.timers.delete(room.closeTimer);
+    room.closeTimer = undefined;
+  }
+}
+
 function onDisconnect(ws: WebSocket): void {
   // 观战连接：直接清理订阅
-  const wcode = watchMeta.get(ws);
-  if (wcode) {
-    const wroom = rooms.get(wcode);
+  const wmeta = watchMeta.get(ws);
+  if (wmeta) {
+    const wroom = rooms.get(wmeta.code);
     wroom?.watchers.delete(ws);
     watchMeta.delete(ws);
   }
@@ -127,6 +153,8 @@ function onDisconnect(ws: WebSocket): void {
       } else {
         broadcastView(room);
       }
+      // 对局中真人全掉线：延时关房（60 秒重连窗口）
+      maybeCloseEmpty(room);
     }
   }
   if (!room.state) {
@@ -180,6 +208,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       }
       room.seats[seatId].ws = ws;
       connMeta.set(ws, { code, seatId });
+      cancelClose(room);
       send(ws, {
         type: 'joined',
         code,
@@ -239,6 +268,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         seat.ws = ws;
         seat.left = false;
         connMeta.set(ws, { code, seatId: msg.playerId });
+        cancelClose(room);
         if (!room.state) {
           send(ws, {
             type: 'joined',
@@ -339,6 +369,8 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       });
       // 其他玩家：刷新视图（看到托管标志）
       broadcastView(room);
+      // 对局中真人全退出：延时关房（60 秒重连窗口）
+      maybeCloseEmpty(room);
       return;
     }
     case 'emoji': {
@@ -361,7 +393,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         return;
       }
       // 观战：不占座位，订阅房间全牌面对局广播
-      watchMeta.set(ws, code);
+      watchMeta.set(ws, { code, name: msg.name });
       room.watchers.add(ws);
       const hostSeat = room.seats[room.hostId];
       send(ws, { type: 'watchStart', code, hostName: hostSeat?.name ?? '' });
@@ -372,10 +404,28 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       return;
     }
     case 'watchLeave': {
-      const wcode = watchMeta.get(ws);
-      if (wcode) {
-        rooms.get(wcode)?.watchers.delete(ws);
+      const wmeta = watchMeta.get(ws);
+      if (wmeta) {
+        rooms.get(wmeta.code)?.watchers.delete(ws);
         watchMeta.delete(ws);
+      }
+      return;
+    }
+    case 'watchEmoji': {
+      const code = msg.code.trim().toUpperCase();
+      const room = rooms.get(code);
+      if (!room || !room.watchers.has(ws)) return;
+      const wm = watchMeta.get(ws);
+      const watcherName = wm?.name?.trim() || '观战者';
+      const chatMsg = { type: 'chat', name: watcherName, text: msg.text };
+      // 广播给房间内真人
+      for (const seat of room.seats) {
+        if (seat.isBot || !seat.ws || seat.ws.readyState !== 1) continue;
+        send(seat.ws, chatMsg);
+      }
+      // 广播给其他观战者（发送者本地自行显示）
+      for (const w of room.watchers) {
+        if (w !== ws) send(w, chatMsg);
       }
       return;
     }

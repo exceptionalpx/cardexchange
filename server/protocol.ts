@@ -105,9 +105,10 @@ export type ClientMessage =
   | { type: 'emoji'; emoji: string }
   | { type: 'leave' }
   | { type: 'exitGame' }
-  | { type: 'watchRoom'; code: string }
+  | { type: 'watchRoom'; code: string; name?: string }
   | { type: 'watchLeave' }
-  | { type: 'checkSession'; code: string; playerId: number };
+  | { type: 'checkSession'; code: string; playerId: number }
+  | { type: 'watchEmoji'; code: string; text: string };
 
 export type ServerMessage =
   | {
@@ -151,4 +152,5 @@ export type ServerMessage =
   | { type: 'roomClosed'; message: string }
   | { type: 'emoji'; from: number; emoji: string }
   | { type: 'sessionCheck'; valid: boolean; message?: string }
+  | { type: 'chat'; name: string; text: string }
   | { type: 'error'; message: string };

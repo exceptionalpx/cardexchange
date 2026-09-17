@@ -32,7 +32,7 @@ describe('房间管理（建房不锁人数）', () => {
     expect(room.hostId).toBe(0);
     expect(room.seats[0].name).toBe('小明');
     expect(room.seats[0].isBot).toBe(false);
-    expect(room.seats[0].ready).toBe(false);
+    expect(room.seats[0].ready).toBe(true); // 房主免准备：建房即已准备
     const info = seatInfo(room);
     for (let i = 1; i < 4; i++) {
       expect(info[i].taken).toBe(false); // 空位可加入
@@ -48,8 +48,8 @@ describe('房间管理（建房不锁人数）', () => {
     expect(room.seats[1].ready).toBe(true); // 机器人恒已准备
     expect(addBot(room)).toBe(true);
     expect(room.seats[2].isBot).toBe(true);
-    // 房主 + 2 机器人 = 3 人，但房主未准备 → 不可开始
-    expect(canStart(room)).toBe(false);
+    // 房主免准备（已准备）+ 2 机器人 = 3 人全已准备 → 可直接开始
+    expect(canStart(room)).toBe(true);
     // 移除机器人：从最后一个机器人开始
     expect(removeBot(room)).toBe(true);
     expect(room.seats[2].isBot).toBe(false);
@@ -113,7 +113,7 @@ describe('房间管理（建房不锁人数）', () => {
     addBot(room);
     const info = seatInfo(room);
     expect(info[0].taken).toBe(true);
-    expect(info[0].ready).toBe(false);
+    expect(info[0].ready).toBe(true); // 房主免准备：建房即已准备
     expect(info[1].taken).toBe(true); // 机器人
     expect(info[1].ready).toBe(true);
     expect(info[2].taken).toBe(false); // 空位

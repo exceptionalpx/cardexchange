@@ -72,6 +72,10 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
         case 'emoji':
           setEmojiEvent({ from: msg.from, label: msg.emoji, ts: Date.now() });
           break;
+        case 'chat':
+          // 观战者发来的消息：以 toast 广播显示
+          setEmojiEvent({ from: -1, label: `👀 观战者 ${msg.name}：${msg.text}`, ts: Date.now() });
+          break;
         case 'exitGame':
           exitedRef.current = true;
           setInGame(false);

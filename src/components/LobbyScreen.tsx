@@ -6,6 +6,24 @@ import RulesPanel from './RulesPanel';
 
 export const ONLINE_KEY = 'cardexchange-online';
 
+/** 头像 → 默认昵称（玩家未输入昵称时，选动物头像自动填入；输入过则以玩家为准） */
+const AVATAR_NAMES: Record<string, string> = {
+  '🐱': '小猫咪',
+  '🐶': '小狗狗',
+  '🐰': '小兔子',
+  '🐻': '小熊',
+  '🦊': '小狐狸',
+  '🐼': '小熊猫',
+  '🐨': '小考拉',
+  '🦁': '小狮子',
+  '🐸': '小青蛙',
+  '🐧': '小企鹅',
+  '🦄': '小独角兽',
+  '🐯': '小老虎',
+};
+
+export const THEME_KEY = 'cardexchange-theme';
+
 /** GET /api/rooms 返回的开放房间摘要 */
 interface OpenRoom {
   code: string;
@@ -57,8 +75,16 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const [error, setError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [openRooms, setOpenRooms] = useState<OpenRoom[]>([]);
-  /** 创建/加入板块是否展开（默认收起，点击按钮展开） */
+  /** 创建/加入弹窗（null=收起） */
   const [openPanel, setOpenPanel] = useState<'create' | 'join' | null>(null);
+  /** 主题：可爱风（默认）/ 经典风 */
+  const [theme, setTheme] = useState<'cute' | 'classic'>(
+    () => (localStorage.getItem(THEME_KEY) as 'cute' | 'classic') || 'cute',
+  );
+  /** 昵称是否被玩家手动编辑过（本地已有昵称视为填过，选头像不覆盖） */
+  const [nameTouched, setNameTouched] = useState(
+    () => !!localStorage.getItem('cardexchange-name'),
+  );
   // 建房房间设置（创建时随 createRoom 下发）
   const [createFollowMs, setCreateFollowMs] = useState(3000);
   const [createBonus, setCreateBonus] = useState(true);
@@ -72,9 +98,18 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const roomRef = useRef<RoomView | null>(null);
   roomRef.current = room;
 
+  // 主题切换：写入 <html data-theme> + localStorage
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
   function changeAvatar(v: string) {
     setAvatar(v);
     localStorage.setItem(AVATAR_KEY, v);
+    // 选动物头像：昵称为空或未手动编辑过 → 自动填动物默认昵称；输入过则以玩家为准
+    const animalName = AVATAR_NAMES[v];
+    if (animalName && (!name.trim() || !nameTouched)) setName(animalName);
   }
 
   // ---- 开放房间列表：进入大厅拉取 + 每 5 秒轮询 + 手动刷新 ----
@@ -233,7 +268,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
           </div>
         )}
 
-        <div className="menu-actions">
+        <div className="room-actions">
           {room.inGame ? (
             <>
               <button className="btn btn-big btn-primary" onClick={rejoin}>
@@ -241,47 +276,59 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
               </button>
               <p className="hint">对局结束后可正常参与下一局</p>
             </>
-          ) : isHost ? (
-            <>
-              <button
-                className="btn"
-                disabled={!waiting}
-                onClick={() => net.send({ type: 'addBot' })}
-              >
-                添加机器人
-              </button>
-              <button
-                className="btn"
-                disabled={botCount === 0}
-                onClick={() => net.send({ type: 'removeBot' })}
-              >
-                移除机器人
-              </button>
-              <button
-                className="btn btn-big btn-primary"
-                disabled={!room.canStart}
-                onClick={() => net.send({ type: 'startGame' })}
-              >
-                {room.canStart
-                  ? `开始游戏（${total} 人）`
-                  : total < 2
-                    ? '至少 2 人才能开始'
-                    : '等待所有人准备…'}
-              </button>
-            </>
           ) : (
-            <p className="hint">等待房主开始游戏…</p>
-          )}
-          {!room.inGame && me && !me.isBot && (
-            <button
-              className="btn btn-big"
-              onClick={() => net.send({ type: 'ready', ready: !me.ready })}
-            >
-              {me.ready ? '取消准备' : '准备'}
-            </button>
+            <>
+              {/* 主操作区：房主开始游戏 / 其他真人准备 */}
+              <div className="room-actions-main">
+                {isHost ? (
+                  <button
+                    className="btn btn-big btn-primary"
+                    disabled={!room.canStart}
+                    onClick={() => net.send({ type: 'startGame' })}
+                  >
+                    {room.canStart
+                      ? `开始游戏（${total} 人）`
+                      : total < 2
+                        ? '至少 2 人才能开始'
+                        : '等待其他玩家准备…'}
+                  </button>
+                ) : (
+                  <>
+                    <p className="hint">等待房主开始游戏…</p>
+                    {me && !me.isBot && (
+                      <button
+                        className="btn btn-big"
+                        onClick={() => net.send({ type: 'ready', ready: !me.ready })}
+                      >
+                        {me.ready ? '取消准备' : '准备'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+              {/* 管理区（房主）：机器人添加/移除 */}
+              {isHost && (
+                <div className="room-actions-manage">
+                  <button
+                    className="btn"
+                    disabled={!waiting}
+                    onClick={() => net.send({ type: 'addBot' })}
+                  >
+                    添加机器人
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={botCount === 0}
+                    onClick={() => net.send({ type: 'removeBot' })}
+                  >
+                    移除机器人
+                  </button>
+                </div>
+              )}
+            </>
           )}
           {!room.inGame && (
-            <button className="btn btn-big" onClick={leave}>
+            <button className="btn btn-small room-leave" onClick={leave}>
               离开房间
             </button>
           )}
@@ -299,15 +346,17 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
       {/* 会话/操作错误：醒目横幅（首页顶部，替代底部小字） */}
       {error && <div className="home-error-banner">⚠ {error}</div>}
 
-      {/* ① 规则（详细全文，可展开/收起） */}
+      {/* ① 风格切换 + 规则（弹窗） */}
       <div className="menu-section">
         <button
-          className={`btn ${showRules ? 'btn-active' : ''}`}
-          onClick={() => setShowRules((v) => !v)}
+          className="btn btn-small"
+          onClick={() => setTheme(theme === 'cute' ? 'classic' : 'cute')}
         >
-          规则
+          🎨 {theme === 'cute' ? '可爱风' : '经典风'}
         </button>
-        {showRules && <RulesPanel inline />}
+        <button className="btn" onClick={() => setShowRules(true)}>
+          📜 规则
+        </button>
       </div>
 
       {/* ② 引导局（新手教学） */}
@@ -325,7 +374,10 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
           value={name}
           maxLength={8}
           placeholder="输入你的昵称"
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameTouched(true);
+          }}
         />
         <div className="avatar-lobby">
           <AvatarPicker value={avatar} onChange={changeAvatar} />
@@ -386,101 +438,131 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
         )}
       </div>
 
-      {/* ⑥ 创建 / 加入 两个入口按钮（默认收起，点击展开对应板块） */}
+      {/* ⑥ 创建 / 加入 两个入口按钮（点击弹出居中弹窗） */}
       <div className="lobby-entry">
         <button
-          className={`btn btn-big btn-primary ${openPanel === 'create' ? 'btn-active' : ''}`}
-          onClick={() => setOpenPanel(openPanel === 'create' ? null : 'create')}
+          className="btn btn-big btn-primary"
+          onClick={() => setOpenPanel('create')}
         >
           ＋ 创建房间
         </button>
-        <button
-          className={`btn btn-big ${openPanel === 'join' ? 'btn-active' : ''}`}
-          onClick={() => setOpenPanel(openPanel === 'join' ? null : 'join')}
-        >
+        <button className="btn btn-big" onClick={() => setOpenPanel('join')}>
           🚪 加入房间
         </button>
       </div>
 
+      {/* 创建房间弹窗（点遮罩不关，防误触丢表单；×/取消 关闭） */}
       {openPanel === 'create' && (
-        <div className="menu-section lobby-col">
-          <button
-            className="btn btn-big btn-primary"
-            onClick={() => {
-              if (!name.trim()) {
-                setError('请先输入昵称');
-                return;
-              }
-              net.send({ type: 'createRoom', name, avatar, config: { followWindowMs: createFollowMs, declareBonus: createBonus, allowSelfFollow: createSelfFollow, botMemory: createBotMemory } });
-            }}
-          >
-            创建房间
-          </button>
-          <p className="hint">创建后可在房间内添加机器人（1~3 个）或等待玩家加入，最多 4 人</p>
-          <div className="settings-title">⚙ 房间设置</div>
-          <div className="settings-grid">
-            <div>
-              <label>跟弃窗口</label>
-              <div className="btn-group">
-                {[2000, 3000, 4000].map((ms) => (
-                  <button key={ms} className={createFollowMs === ms ? "btn btn-primary" : "btn"} onClick={() => setCreateFollowMs(ms)}>
-                    {ms / 1000} 秒
-                  </button>
-                ))}
-              </div>
+        <div className="modal">
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>＋ 创建房间</h2>
+              <button className="btn btn-small" onClick={() => setOpenPanel(null)}>
+                ✕
+              </button>
             </div>
-            <div>
-              <label>机器人难度</label>
-              <div className="btn-group">
-                {[
-                  { v: 0.4, t: "新手" },
-                  { v: 0.2, t: "标准" },
-                  { v: 0, t: "高手" },
-                ].map((o) => (
-                  <button key={o.v} className={createBotMemory === o.v ? "btn btn-primary" : "btn"} onClick={() => setCreateBotMemory(o.v)}>
-                    {o.t}
-                  </button>
-                ))}
+            <button
+              className="btn btn-big btn-primary"
+              onClick={() => {
+                if (!name.trim()) {
+                  setError('请先输入昵称');
+                  return;
+                }
+                net.send({ type: 'createRoom', name, avatar, config: { followWindowMs: createFollowMs, declareBonus: createBonus, allowSelfFollow: createSelfFollow, botMemory: createBotMemory } });
+              }}
+            >
+              创建房间
+            </button>
+            <p className="hint">创建后可在房间内添加机器人（1~3 个）或等待玩家加入，最多 4 人</p>
+            <div className="settings-title">⚙ 房间设置</div>
+            <div className="settings-grid">
+              <div>
+                <label>跟弃窗口</label>
+                <div className="btn-group">
+                  {[2000, 3000, 4000].map((ms) => (
+                    <button key={ms} className={createFollowMs === ms ? "btn btn-primary" : "btn"} onClick={() => setCreateFollowMs(ms)}>
+                      {ms / 1000} 秒
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div>
-              <label>规则开关</label>
-              <div className="btn-group">
-                <button className={createBonus ? "btn btn-primary" : "btn"} onClick={() => setCreateBonus(!createBonus)}>定牌奖励 {createBonus ? "开" : "关"}</button>
-                <button className={createSelfFollow ? "btn btn-primary" : "btn"} onClick={() => setCreateSelfFollow(!createSelfFollow)}>跟弃自己 {createSelfFollow ? "开" : "关"}</button>
+              <div>
+                <label>机器人难度</label>
+                <div className="btn-group">
+                  {[
+                    { v: 0.4, t: "新手" },
+                    { v: 0.2, t: "标准" },
+                    { v: 0, t: "高手" },
+                  ].map((o) => (
+                    <button key={o.v} className={createBotMemory === o.v ? "btn btn-primary" : "btn"} onClick={() => setCreateBotMemory(o.v)}>
+                      {o.t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label>规则开关</label>
+                <div className="btn-group">
+                  <button className={createBonus ? "btn btn-primary" : "btn"} onClick={() => setCreateBonus(!createBonus)}>定牌奖励 {createBonus ? "开" : "关"}</button>
+                  <button className={createSelfFollow ? "btn btn-primary" : "btn"} onClick={() => setCreateSelfFollow(!createSelfFollow)}>跟弃自己 {createSelfFollow ? "开" : "关"}</button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* 加入房间弹窗（点遮罩不关；×/取消 关闭） */}
       {openPanel === 'join' && (
-        <div className="menu-section lobby-col">
-          <label>加入房间</label>
-          <input
-            className="text-input"
-            value={joinCode}
-            maxLength={4}
-            placeholder="输入 4 位房间码"
-            style={{ textTransform: 'uppercase' }}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-          />
-          <button
-            className="btn btn-big"
-            onClick={() => {
-              if (!name.trim()) {
-                setError('请先输入昵称');
-                return;
-              }
-              if (joinCode.trim().length !== 4) {
-                setError('请输入 4 位房间码');
-                return;
-              }
-              net.send({ type: 'joinRoom', code: joinCode, name, avatar });
-            }}
-          >
-            加入房间
-          </button>
+        <div className="modal">
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>🚪 加入房间</h2>
+              <button className="btn btn-small" onClick={() => setOpenPanel(null)}>
+                ✕
+              </button>
+            </div>
+            <label>输入 4 位房间码</label>
+            <input
+              className="text-input"
+              value={joinCode}
+              maxLength={4}
+              placeholder="例如 ABCD"
+              style={{ textTransform: 'uppercase' }}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            />
+            <button
+              className="btn btn-big"
+              onClick={() => {
+                if (!name.trim()) {
+                  setError('请先输入昵称');
+                  return;
+                }
+                if (joinCode.trim().length !== 4) {
+                  setError('请输入 4 位房间码');
+                  return;
+                }
+                net.send({ type: 'joinRoom', code: joinCode, name, avatar });
+              }}
+            >
+              加入房间
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 规则弹窗（点遮罩或 ✕ 关闭） */}
+      {showRules && (
+        <div className="modal" onClick={() => setShowRules(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>📜 规则</h2>
+              <button className="btn btn-small" onClick={() => setShowRules(false)}>
+                ✕
+              </button>
+            </div>
+            <RulesPanel inline />
+          </div>
         </div>
       )}
 

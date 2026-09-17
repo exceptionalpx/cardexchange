@@ -1709,3 +1709,153 @@ body {
   font-weight: 700;
   line-height: 1.5;
 }
+
+/* ============ 弹窗头部 + 房间页分组 + 观战布局固定 + 经典风主题覆盖层 ============ */
+
+/* 弹窗头部（标题 + ✕） */
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.modal-head h2 {
+  font-size: 20px;
+  color: var(--green-dark);
+}
+/* 规则全文在弹窗内紧凑展示（内联版改为静态滚动卡片） */
+.modal-card .rules-panel {
+  position: static;
+  width: 100%;
+  max-height: 55vh;
+  overflow: auto;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 253, 246, 0.7);
+  font-size: 13px;
+  line-height: 1.65;
+  box-shadow: none;
+}
+
+/* 房间等待页按钮分组：主操作区 / 管理区 / 离开独立 */
+.room-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+.room-actions-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.room-actions-manage {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.room-leave {
+  margin-top: 4px;
+  opacity: 0.75;
+}
+
+/* 观战布局：按设备固定（宽屏横排一行 / 窄屏竖排），不随窗口 resize 跳动 */
+.watch-screen .seats {
+  flex-wrap: nowrap;
+}
+@media (max-width: 900px) {
+  .watch-screen .seats {
+    flex-direction: column;
+    align-items: center;
+  }
+  .watch-screen .seat {
+    min-width: 220px;
+  }
+}
+
+/* ============ 经典风主题覆盖层（默认可爱风，首页可切换回经典深绿） ============ */
+[data-theme='classic'] {
+  --green-dark: #0b5e3b;
+  --green-mid: #147a4c;
+  --green-light: #2f9a66;
+  --cream: #f4f8f5;
+  --felt: radial-gradient(ellipse at center, #2f9a66 0%, #1f9a61 45%, #147a4c 75%, #0b5e3b 100%);
+  --text: #f2f8f3;
+  --text-soft: rgba(240, 248, 241, 0.8);
+  --line: rgba(240, 248, 241, 0.32);
+  --gold: #f6c945;
+  --gold-deep: #f0e6b0;
+}
+[data-theme='classic'] body {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    var(--felt);
+  background-size: 28px 28px, 28px 28px, auto;
+}
+/* 经典风：深色面板 */
+[data-theme='classic'] .modal-card,
+[data-theme='classic'] .room-item,
+[data-theme='classic'] .text-input,
+[data-theme='classic'] .rules-panel,
+[data-theme='classic'] .log-panel,
+[data-theme='classic'] .result,
+[data-theme='classic'] .room-scoreboard,
+[data-theme='classic'] .emoji-panel {
+  background: rgba(8, 50, 32, 0.82);
+  color: var(--text);
+}
+[data-theme='classic'] .seat {
+  background: rgba(8, 50, 32, 0.55);
+}
+[data-theme='classic'] .seat-current {
+  background: rgba(20, 90, 60, 0.75);
+}
+/* 经典风：蓝底牌背（替代粉白圆点） */
+[data-theme='classic'] .card-back,
+[data-theme='classic'] .deck-card {
+  background-color: #1e5aa8;
+  background-image: linear-gradient(135deg, #2a6cc4 0%, #163d77 100%);
+  border-color: rgba(240, 248, 241, 0.85);
+}
+/* 经典风：粉彩按钮 → 沉稳深色系 */
+[data-theme='classic'] .btn {
+  background: rgba(244, 248, 245, 0.92);
+  border-color: #0b5e3b;
+  color: #0b5e3b;
+}
+[data-theme='classic'] .btn-primary,
+[data-theme='classic'] .btn-draw {
+  background: var(--gold);
+  border-color: #8a6d00;
+  color: #5b3d00;
+}
+[data-theme='classic'] .btn-ability {
+  background: #b7c9f2;
+  border-color: #4a6bb5;
+  color: #223a75;
+}
+[data-theme='classic'] .btn-declare {
+  background: #f2a08a;
+  border-color: #b54a2a;
+  color: #5e1f0a;
+}
+[data-theme='classic'] .btn-discard {
+  background: #f2b0a8;
+  border-color: #a84a3f;
+  color: #5e1f16;
+}
+[data-theme='classic'] .btn-replace {
+  background: #9fd8c4;
+  border-color: #2f7a5c;
+  color: #0f4a35;
+}
+[data-theme='classic'] .btn-active {
+  background: #f2c9a0;
+  border-color: #b57a2a;
+  color: #5e3a0f;
+}

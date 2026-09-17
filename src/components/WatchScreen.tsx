@@ -21,6 +21,9 @@ const PHASE_LABEL: Record<WatchView['phase'], string> = {
   end: '已结束',
 };
 
+/** 与对局玩家一致的快捷表情/短语 */
+const EMOJIS = ['😤 跟！', '😏 记不住', '🤝 好牌', '💪 加油', '😂 哈哈', '😅 失误', '🙈 看不见', '🎯 定牌！'];
+
 /** 观战动作日志：取最近一次事件（字段被广播覆盖即最新） */
 function lastActionText(v: WatchView): string | null {
   const players = v.players;
@@ -42,12 +45,24 @@ export default function WatchScreen({ code, onExit }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [closed, setClosed] = useState<string | null>(null);
   const netRef = useRef<Net | null>(null);
+  // 观战者消息：本机昵称（首页已存）+ 消息面板 + toast
+  const watcherNameRef = useRef(localStorage.getItem('cardexchange-name')?.trim() || '观战者');
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiText, setEmojiText] = useState('');
+  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
+  const toastIdRef = useRef(0);
+
+  function showToast(text: string) {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev.slice(-3), { id, text }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+  }
 
   useEffect(() => {
     const net = new Net();
     netRef.current = net;
     // 断线自动重连并重新订阅观战
-    net.setResume(() => ({ type: 'watchRoom', code }));
+    net.setResume(() => ({ type: 'watchRoom', code, name: watcherNameRef.current }));
     const off = net.onMessage((msg) => {
       switch (msg.type) {
         case 'watchStart':
@@ -61,6 +76,9 @@ export default function WatchScreen({ code, onExit }: Props) {
         case 'watchClosed':
           setClosed(msg.message);
           break;
+        case 'chat':
+          showToast(`👀 观战者 ${msg.name}：${msg.text}`);
+          break;
         case 'error':
           setError(msg.message);
           break;
@@ -68,13 +86,22 @@ export default function WatchScreen({ code, onExit }: Props) {
     });
     net
       .connect()
-      .then(() => net.send({ type: 'watchRoom', code }))
+      .then(() => net.send({ type: 'watchRoom', code, name: watcherNameRef.current }))
       .catch(() => setError('无法连接联机服务器'));
     return () => {
       off();
       net.close();
     };
   }, [code]);
+
+  function sendWatchChat(text: string) {
+    showToast(`👀 观战者 ${watcherNameRef.current}：${text}`);
+    try {
+      netRef.current?.send({ type: 'watchEmoji', code, text });
+    } catch {
+      /* 忽略 */
+    }
+  }
 
   function exitWatch() {
     // 正常退出：告知服务器取消订阅后断开
@@ -206,6 +233,63 @@ export default function WatchScreen({ code, onExit }: Props) {
           )}
         </div>
       )}
+
+      {/* 观战者消息：💬 面板（8 预设 + 自定义）+ toast 层 */}
+      <button className="emoji-fab" onClick={() => setEmojiOpen((v) => !v)} aria-label="观战消息">
+        💬
+      </button>
+      {emojiOpen && (
+        <div className="emoji-panel">
+          <div className="emoji-grid">
+            {EMOJIS.map((e) => (
+              <button
+                key={e}
+                className="emoji-btn"
+                onClick={() => {
+                  sendWatchChat(e);
+                  setEmojiOpen(false);
+                }}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+          <div className="emoji-custom">
+            <input
+              value={emojiText}
+              maxLength={20}
+              placeholder="输入想说的话…"
+              onChange={(ev) => setEmojiText(ev.target.value)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" && emojiText.trim()) {
+                  sendWatchChat(emojiText.trim());
+                  setEmojiText("");
+                  setEmojiOpen(false);
+                }
+              }}
+            />
+            <button
+              className="btn btn-primary"
+              disabled={!emojiText.trim()}
+              onClick={() => {
+                if (!emojiText.trim()) return;
+                sendWatchChat(emojiText.trim());
+                setEmojiText("");
+                setEmojiOpen(false);
+              }}
+            >
+              发送
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="toasts">
+        {toasts.map((t) => (
+          <div key={t.id} className="toast">
+            {t.text}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // 房间管理：座位、开局、服务器权威调度（AI + 超时）、per-viewer 广播
 // 房间模型：固定 4 个座位，建房只占房主 1 座；房主可添加/移除机器人，真人加入坐空位；
-// 所有真人"准备"后房主才能开局；对局后按座位累计总分（多局连打，总分最小者最终胜）。
+// 房主建房即已准备；其余真人"准备"后房主可开局；对局后按座位累计总分（多局连打，总分最小者最终胜）。
 import type { WebSocket } from 'ws';
 import type { Action, GameConfig, GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
@@ -40,6 +40,8 @@ export interface Room {
   aiControlled: Set<number>;
   /** 观战者连接（不占座位，订阅本房间全牌面对局广播） */
   watchers: Set<WebSocket>;
+  /** 无真人延时关房计时器（方案B：60 秒等待重连） */
+  closeTimer?: ReturnType<typeof setTimeout>;
 }
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -60,7 +62,7 @@ export function emptySeat(id: number): Seat {
 /** 建房：只占房主 1 座，其余 3 座为空位，人数/机器人由房主后续调整 */
 export function createRoom(code: string, name: string, avatar?: string, config: Partial<GameConfig> = {}): Room {
   const seats: Seat[] = [
-    { id: 0, name, isBot: false, ws: null, avatar, ready: false },
+    { id: 0, name, isBot: false, ws: null, avatar, ready: true },
     emptySeat(1),
     emptySeat(2),
     emptySeat(3),
@@ -150,7 +152,8 @@ export function setReady(room: Room, seatId: number, ready: boolean): boolean {
   if (room.state) return false;
   const s = room.seats[seatId];
   if (!s || s.isBot || !s.ws) return false;
-  s.ready = ready;
+  // 房主免准备：恒为已准备，忽略取消
+  s.ready = seatId === room.hostId ? true : ready;
   return true;
 }
 
