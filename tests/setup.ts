@@ -4,3 +4,9 @@ import '@testing-library/jest-dom';
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = (() => {}) as typeof Element.prototype.scrollTo;
 }
+
+// jsdom 未实现 HTMLMediaElement.play/pause/volume，mock 掉避免音效模块在测试中打印噪音
+if (typeof HTMLMediaElement !== 'undefined') {
+  HTMLMediaElement.prototype.play = (() => Promise.resolve()) as typeof HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.pause = (() => {}) as typeof HTMLMediaElement.prototype.pause;
+}

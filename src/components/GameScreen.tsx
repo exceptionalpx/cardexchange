@@ -15,6 +15,7 @@ import ResultScreen from './ResultScreen';
 import SwapAnim from './SwapAnim';
 import MoveAnim from './MoveAnim';
 import PeekAnim from './PeekAnim';
+import { playSfx } from '../core/sfx';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
 export interface OnlineGameProps {
@@ -221,11 +222,13 @@ export default function GameScreen({ config, online, onExit }: Props) {
   }, [state.phase, state.follow, isOnline, followWindowMs]);
 
   // ---- 跟弃窗口倒计时（显示剩余秒数，点放弃可提前关闭） ----
+  const prevTickRef = useRef(-1);
   useEffect(() => {
     if (state.phase !== 'follow' || !state.follow) {
       followStartRef.current = null;
       setGaveUp(false);
       setFollowLeft(0);
+      prevTickRef.current = -1;
       return;
     }
     const iv = setInterval(() => {
@@ -233,9 +236,58 @@ export default function GameScreen({ config, online, onExit }: Props) {
       const start = followStartRef.current ?? Date.now();
       const rem = Math.max(0, Math.ceil((followWindowMs - (Date.now() - start)) / 1000));
       setFollowLeft(rem);
+      // 倒计时滴答：剩余秒数变化时响一次（0 秒不响）
+      if (rem !== prevTickRef.current) {
+        prevTickRef.current = rem;
+        if (rem > 0) playSfx('countdown');
+      }
     }, 200);
     return () => clearInterval(iv);
-  }, [state.phase, state.follow]);
+  }, [state.phase, state.follow, followWindowMs]);
+
+  // ---- 音效：摸牌/盖牌/看牌/换牌/替换/弃牌/罚牌/定牌/跟弃成功（按 animSeq 与状态变化各触发一次） ----
+  const animSeqRef = useRef(0);
+  const prevPendingKindRef = useRef<string | null>(null);
+  const prevDeclaredRef = useRef<number | null>(null);
+  const prevDealKeyRef = useRef<string | null>(null);
+  const prevFollowSubRef = useRef<number | null>(null);
+  useEffect(() => {
+    // 动画事件：lastSwap / lastMove / lastPenalty（animSeq 递增防重）
+    const seq = state.animSeq;
+    if (seq !== animSeqRef.current) {
+      animSeqRef.current = seq;
+      if (state.lastSwap) {
+        playSfx('swap_other'); // 与别人换牌（J/Q/K）
+      } else if (state.lastMove) {
+        playSfx(state.lastMove.kind === 'discard' ? 'discard' : 'swap_self');
+      }
+      if (state.lastPenalty) playSfx('follow_fail'); // 跟弃失败罚牌
+    }
+    // 摸牌 / 看牌
+    const pk = state.pending?.kind ?? null;
+    if (pk !== prevPendingKindRef.current) {
+      prevPendingKindRef.current = pk;
+      if (pk === 'drawn') playSfx('card_draw');
+      if (pk === 'revealDone') playSfx('peek');
+    }
+    // 宣布定牌
+    if (state.declaredPlayer !== prevDeclaredRef.current) {
+      prevDeclaredRef.current = state.declaredPlayer;
+      if (state.declaredPlayer !== null) playSfx('declare');
+    }
+    // 盖牌（dealConfirmed 出现 true 时播一次；首次渲染不播）
+    const dealKey = state.dealConfirmed.join(',');
+    if (dealKey !== prevDealKeyRef.current) {
+      if (prevDealKeyRef.current !== null && dealKey.includes('true')) playSfx('card_cover');
+      prevDealKeyRef.current = dealKey;
+    }
+    // 跟弃成功：跟弃窗口关闭时存在提交成功者
+    const sub = state.follow?.submitted.length ?? 0;
+    if (prevFollowSubRef.current !== null && prevFollowSubRef.current > 0 && !state.follow) {
+      playSfx('follow_success');
+    }
+    prevFollowSubRef.current = sub;
+  }, [state]);
 
   // ---- 翻看（7/8、9/10）5 秒限时：到点自动收起（联机也由客户端主动提交，服务器兜底） ----
   useEffect(() => {
@@ -369,6 +421,9 @@ export default function GameScreen({ config, online, onExit }: Props) {
         if (localTotals.scores[p.name] !== undefined) localScores[p.id] = localTotals.scores[p.name];
       }
     }
+    // 胜负判定：联机看自己是否在胜者名单；本地热座看是否有真人获胜
+    const winners = state.winner ?? [];
+    const myWin = isOnline && online ? winners.includes(online.myId) : state.players.some((p) => !p.isBot && winners.includes(p.id));
     return (
       <ResultScreen
         state={state}
@@ -377,6 +432,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
         onExit={onExit}
         totalScores={isOnline && online ? online.view.totalScores : localScores}
         gamesPlayed={isOnline && online ? online.view.gamesPlayed : localTotals?.games}
+        myWin={myWin}
       />
     );
   }

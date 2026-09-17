@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import GameScreen from './components/GameScreen';
 import OnlineFlow from './components/OnlineFlow';
 import WatchScreen from './components/WatchScreen';
 import { loadAvatar } from './components/AvatarPicker';
+import { unlockAudio } from './core/sfx';
 
 export interface GameConfigUI {
   playerCount: number;
@@ -26,6 +27,13 @@ export default function App() {
   const [guidedCfg, setGuidedCfg] = useState<GameConfigUI | null>(null);
   // 观战：点击开放房间中"对局中"的房间进入（独立连接，不占座位）
   const [watchCode, setWatchCode] = useState<string | null>(null);
+
+  // 首次用户交互：解锁音频并启动背景音乐（iOS Safari 需要用户手势后才能播放）
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
 
   if (guidedCfg) {
     return <GameScreen config={guidedCfg} onExit={() => setGuidedCfg(null)} />;

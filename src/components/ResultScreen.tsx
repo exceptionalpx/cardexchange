@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import type { GameState } from '../core/types';
 import CardView from './CardView';
+import { playSfx } from '../core/sfx';
 
 interface Props {
   state: GameState;
@@ -11,6 +13,8 @@ interface Props {
   totalScores?: Record<number, number> | null;
   /** 已玩局数（含本局） */
   gamesPlayed?: number;
+  /** 本客户端视角是否获胜（决定结算音效） */
+  myWin?: boolean;
 }
 
 export default function ResultScreen({
@@ -20,9 +24,15 @@ export default function ResultScreen({
   onExit,
   totalScores,
   gamesPlayed,
+  myWin = true,
 }: Props) {
   const winners = state.winner ?? [];
   const hasTotal = !!totalScores && Object.keys(totalScores).length > 0;
+
+  // 结算音效：获胜/落败（挂载时播一次）
+  useEffect(() => {
+    playSfx(myWin ? 'win' : 'lose');
+  }, [myWin]);
   return (
     <div className="result-screen">
       <div className="result-card">
