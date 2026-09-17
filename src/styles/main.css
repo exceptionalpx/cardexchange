@@ -1859,3 +1859,15 @@ body {
   border-color: #b57a2a;
   color: #5e3a0f;
 }
+
+/* 页面风格设置弹窗：两个风格选项竖排 */
+.theme-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+.theme-pick .btn {
+  font-size: 15px;
+  padding: 12px 18px;
+}

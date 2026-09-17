@@ -77,13 +77,15 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const [openRooms, setOpenRooms] = useState<OpenRoom[]>([]);
   /** 创建/加入弹窗（null=收起） */
   const [openPanel, setOpenPanel] = useState<'create' | 'join' | null>(null);
-  /** 主题：可爱风（默认）/ 经典风 */
+  /** 风格设置弹窗 */
+  const [themeOpen, setThemeOpen] = useState(false);
+  /** 主题：经典风（默认）/ 可爱风 */
   const [theme, setTheme] = useState<'cute' | 'classic'>(
-    () => (localStorage.getItem(THEME_KEY) as 'cute' | 'classic') || 'cute',
+    () => (localStorage.getItem(THEME_KEY) as 'cute' | 'classic') || 'classic',
   );
-  /** 昵称是否被玩家手动编辑过（本地已有昵称视为填过，选头像不覆盖） */
-  const [nameTouched, setNameTouched] = useState(
-    () => !!localStorage.getItem('cardexchange-name'),
+  /** 昵称是否由系统按头像自动填充（自动填的动物名跟随头像变动；手动输入过的不覆盖） */
+  const [nameAuto, setNameAuto] = useState(
+    () => localStorage.getItem('cardexchange-name-auto') === '1',
   );
   // 建房房间设置（创建时随 createRoom 下发）
   const [createFollowMs, setCreateFollowMs] = useState(3000);
@@ -92,6 +94,8 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const [createBotMemory, setCreateBotMemory] = useState(0.2);
   const nameRef = useRef(name);
   nameRef.current = name;
+  const nameAutoRef = useRef(nameAuto);
+  nameAutoRef.current = nameAuto;
   const avatarRef = useRef(avatar);
   avatarRef.current = avatar;
   const myIdRef = useRef(-1);
@@ -107,9 +111,12 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   function changeAvatar(v: string) {
     setAvatar(v);
     localStorage.setItem(AVATAR_KEY, v);
-    // 选动物头像：昵称为空或未手动编辑过 → 自动填动物默认昵称；输入过则以玩家为准
+    // 选动物头像：昵称为空、或昵称是系统自动填的动物名 → 跟随头像更新；手动输入过的不覆盖
     const animalName = AVATAR_NAMES[v];
-    if (animalName && (!name.trim() || !nameTouched)) setName(animalName);
+    if (animalName && (!name.trim() || nameAuto)) {
+      setName(animalName);
+      setNameAuto(true);
+    }
   }
 
   // ---- 开放房间列表：进入大厅拉取 + 每 5 秒轮询 + 手动刷新 ----
@@ -149,6 +156,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
           });
           setError(null);
           localStorage.setItem('cardexchange-name', nameRef.current);
+          localStorage.setItem('cardexchange-name-auto', nameAutoRef.current ? '1' : '0');
           localStorage.setItem(
             ONLINE_KEY,
             JSON.stringify({ code: msg.code, playerId: msg.playerId, name: nameRef.current }),
@@ -346,13 +354,10 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
       {/* 会话/操作错误：醒目横幅（首页顶部，替代底部小字） */}
       {error && <div className="home-error-banner">⚠ {error}</div>}
 
-      {/* ① 风格切换 + 规则（弹窗） */}
+      {/* ① 页面风格设置（弹窗）+ 规则（弹窗） */}
       <div className="menu-section">
-        <button
-          className="btn btn-small"
-          onClick={() => setTheme(theme === 'cute' ? 'classic' : 'cute')}
-        >
-          🎨 {theme === 'cute' ? '可爱风' : '经典风'}
+        <button className="btn btn-small" onClick={() => setThemeOpen(true)}>
+          🎨 页面风格设置
         </button>
         <button className="btn" onClick={() => setShowRules(true)}>
           📜 规则
@@ -376,7 +381,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
           placeholder="输入你的昵称"
           onChange={(e) => {
             setName(e.target.value);
-            setNameTouched(true);
+            setNameAuto(false);
           }}
         />
         <div className="avatar-lobby">
@@ -562,6 +567,40 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
               </button>
             </div>
             <RulesPanel inline />
+          </div>
+        </div>
+      )}
+
+      {/* 页面风格设置弹窗（点遮罩不关，防误触丢选择；✕ 关闭） */}
+      {themeOpen && (
+        <div className="modal">
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>🎨 页面风格设置</h2>
+              <button className="btn btn-small" onClick={() => setThemeOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="theme-pick">
+              <button
+                className={theme === 'classic' ? 'btn btn-primary' : 'btn'}
+                onClick={() => {
+                  setTheme('classic');
+                  setThemeOpen(false);
+                }}
+              >
+                🌿 经典风（深绿牌桌）
+              </button>
+              <button
+                className={theme === 'cute' ? 'btn btn-primary' : 'btn'}
+                onClick={() => {
+                  setTheme('cute');
+                  setThemeOpen(false);
+                }}
+              >
+                🎀 可爱风（奶油绿）
+              </button>
+            </div>
           </div>
         </div>
       )}
