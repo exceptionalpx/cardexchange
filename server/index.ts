@@ -94,12 +94,21 @@ const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 const rooms = new Map<string, Room>();
 // 连接 -> 所属 (roomCode, seatId)
 const connMeta = new WeakMap<WebSocket, { code: string; seatId: number }>();
+// 观战连接 -> 房间码（不占座位，只订阅全牌面对局广播）
+const watchMeta = new WeakMap<WebSocket, string>();
 
 function send(ws: WebSocket, msg: unknown): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
 function onDisconnect(ws: WebSocket): void {
+  // 观战连接：直接清理订阅
+  const wcode = watchMeta.get(ws);
+  if (wcode) {
+    const wroom = rooms.get(wcode);
+    wroom?.watchers.delete(ws);
+    watchMeta.delete(ws);
+  }
   const meta = connMeta.get(ws);
   if (!meta) return;
   const room = rooms.get(meta.code);
@@ -297,6 +306,8 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       broadcastRoom(room);
       const humans = room.seats.filter((s) => !s.isBot);
       if (!room.state && humans.every((s) => !s.ws)) {
+        // 通知观战者房间关闭
+        for (const w of room.watchers) send(w, { type: 'watchClosed', message: '房间已关闭' });
         clearTimers(room);
         rooms.delete(room.code);
       }
@@ -336,6 +347,36 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       const room = rooms.get(meta.code);
       if (!room) return;
       broadcastEmoji(room, meta.seatId, msg.emoji);
+      return;
+    }
+    case 'watchRoom': {
+      const code = msg.code.trim().toUpperCase();
+      const room = rooms.get(code);
+      if (!room) {
+        send(ws, { type: 'error', message: `房间 ${code} 不存在` });
+        return;
+      }
+      if (!room.state) {
+        send(ws, { type: 'error', message: '该房间还没有开始对局，暂时无法观战' });
+        return;
+      }
+      // 观战：不占座位，订阅房间全牌面对局广播
+      watchMeta.set(ws, code);
+      room.watchers.add(ws);
+      const hostSeat = room.seats[room.hostId];
+      send(ws, { type: 'watchStart', code, hostName: hostSeat?.name ?? '' });
+      // 立即下发当前对局快照
+      if (room.state) {
+        broadcastView(room); // broadcastView 内部会给 room.watchers 发 watchView
+      }
+      return;
+    }
+    case 'watchLeave': {
+      const wcode = watchMeta.get(ws);
+      if (wcode) {
+        rooms.get(wcode)?.watchers.delete(ws);
+        watchMeta.delete(ws);
+      }
       return;
     }
     case 'restart': {

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
-import { buildClientView, sanitizePending } from '../server/sanitize';
+import { buildClientView, buildWatchView, sanitizePending } from '../server/sanitize';
 import {
   addBot,
   canStart,
@@ -398,5 +398,41 @@ describe('退出对局与托管', () => {
     });
     expect(v0.aiControlled).toContain(0);
     expect(v0.aiControlled).toHaveLength(1);
+  });
+});
+
+describe('观战视图（方案A 全牌面）', () => {
+  it('buildWatchView：所有玩家手牌牌面、pending、弃牌堆全部可见；不脱敏', () => {
+    const room = createRoom('WATC', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    const st = room.state;
+    if (!st) throw new Error('state 缺失');
+    const metaTotal: Record<number, number> = {};
+    for (const [sid, v] of Object.entries(room.totalScores)) {
+      const pid = room.pidBySeat?.[Number(sid)] ?? -1;
+      if (pid >= 0) metaTotal[pid] = v;
+    }
+    const wv = buildWatchView(st, {
+      roomCode: room.code,
+      totalScores: metaTotal,
+      gamesPlayed: room.gamesPlayed,
+      followWindowMs: 3000,
+      aiControlled: [...room.aiControlled],
+      declareBonus: !!room.config.declareBonus,
+    });
+    expect(wv.type).toBe('watchView');
+    expect(wv.players[0].slots.length).toBe(4);
+    // 所有玩家牌面可见（观战者无信息隐藏）
+    for (const p of wv.players) {
+      for (const c of p.slots) {
+        if (c) expect(c.id).toBeTruthy();
+      }
+    }
+    expect(wv.deckCount).toBe(st.deck.length);
+    expect(wv.discardPile).toEqual(st.discardPile);
+    expect(wv.pending).toEqual(st.pending);
   });
 });

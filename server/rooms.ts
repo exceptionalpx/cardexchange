@@ -5,7 +5,7 @@ import type { WebSocket } from 'ws';
 import type { Action, GameConfig, GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
 import { aiDecide } from '../src/core/ai';
-import { buildClientView } from './sanitize';
+import { buildClientView, buildWatchView } from './sanitize';
 import type { RoomSeatInfo } from './protocol';
 
 export interface Seat {
@@ -38,6 +38,8 @@ export interface Room {
   config: Partial<GameConfig>;
   /** 对局中被托管的玩家 id（退出/掉线后由服务器 AI 代打，重进解除） */
   aiControlled: Set<number>;
+  /** 观战者连接（不占座位，订阅本房间全牌面对局广播） */
+  watchers: Set<WebSocket>;
 }
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -75,6 +77,7 @@ export function createRoom(code: string, name: string, avatar?: string, config: 
     scoringDone: false,
     config,
     aiControlled: new Set(),
+    watchers: new Set(),
   };
 }
 
@@ -393,6 +396,21 @@ export function broadcastView(room: Room): void {
         }),
       }),
     );
+  }
+  // 观战者（全牌面）：随每次对局广播一并下发，实时跟随
+  if (room.watchers.size > 0) {
+    const watchView = buildWatchView(state, {
+      roomCode: room.code,
+      totalScores: metaTotal,
+      gamesPlayed: room.gamesPlayed,
+      followWindowMs: room.config.followWindowMs ?? 3000,
+      aiControlled: [...room.aiControlled],
+      declareBonus: !!room.config.declareBonus,
+    });
+    for (const w of room.watchers) {
+      if (w.readyState !== 1) continue;
+      w.send(JSON.stringify({ type: 'watchView', view: watchView }));
+    }
   }
 }
 

@@ -54,6 +54,7 @@ function makeGame(
     finalRemaining: 0,
     winner: null,
     declaredDeckCount: opts.declaredDeckCount,
+    settleBonus: 0,
     allowSelfFollow: opts.allowSelfFollow ?? true,
     declareBonus: opts.declareBonus ?? false,
     botMemory: 0,
@@ -978,6 +979,7 @@ describe('定牌奖励（declare 记录牌堆剩余，settle 结算减分）', (
     g = applyAction(g, { type: 'DECLARE' });
     expect(g.declaredDeckCount).toBe(g.deck.length);
     const end = settle(g);
+    expect(end.settleBonus).toBe(2); // 结算记录本局定牌奖励分（结算页拆解用）
     const declared = end.players[end.declaredPlayer!];
     const rawScore = handScore(declared.handSlots);
     expect(declared.score).toBe(rawScore - 2);
@@ -989,6 +991,7 @@ describe('定牌奖励（declare 记录牌堆剩余，settle 结算减分）', (
     g = applyAction(g, { type: 'CONFIRM_DEAL', playerId: 1 });
     g = applyAction(g, { type: 'DECLARE' });
     const end = settle(g);
+    expect(end.settleBonus).toBe(0);
     const declared = end.players[end.declaredPlayer!];
     expect(declared.score).toBe(handScore(declared.handSlots));
   });

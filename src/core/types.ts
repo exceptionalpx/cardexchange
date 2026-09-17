@@ -124,6 +124,8 @@ export interface GameState {
   finalRemaining: number;
   /** 定牌时牌堆剩余张数（结算定牌奖励用） */
   declaredDeckCount?: number;
+  /** 本局实际生效的定牌奖励分（0/1/2，结算时写入，结算页拆解展示用） */
+  settleBonus: number;
   /** 是否允许弃牌者自己跟弃（引擎规则开关，默认 true） */
   allowSelfFollow: boolean;
   /** 是否启用定牌奖励（引擎规则开关） */

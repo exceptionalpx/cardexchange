@@ -2,7 +2,7 @@
 // 只把该玩家该看的内容下发到客户端，对手手牌、牌堆内容、他人 knowledge 一律不下发。
 import type { Card, GameConfig, GameState, PendingAction } from '../src/core/types';
 import { buildView } from '../src/core/view';
-import type { ClientGameView } from './protocol';
+import type { ClientGameView, WatchView } from './protocol';
 
 /**
  * 对挂起交互做牌面脱敏：
@@ -78,5 +78,54 @@ export function buildClientView(
     gamesPlayed: meta?.gamesPlayed ?? 0,
     followWindowMs: meta?.config?.followWindowMs ?? 3000,
     aiControlled: meta?.aiControlled ?? [],
+    declareBonus: !!meta?.config?.declareBonus,
+    settleBonus: state.settleBonus,
+  };
+}
+
+/** 观战视图（方案A 全视角）：所有玩家手牌牌面、弃牌堆、功能区、操作动画全部可见；不占座位 */
+export function buildWatchView(
+  state: GameState,
+  meta: {
+    roomCode: string;
+    totalScores: Record<number, number>;
+    gamesPlayed: number;
+    followWindowMs: number;
+    aiControlled: number[];
+    declareBonus: boolean;
+  },
+): WatchView {
+  return {
+    type: 'watchView',
+    roomCode: meta.roomCode,
+    players: state.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      isBot: p.isBot,
+      slots: p.handSlots,
+      score: p.score,
+    })),
+    deckCount: state.deck.length,
+    discardPile: state.discardPile,
+    usedPile: state.usedPile,
+    currentPlayer: state.currentPlayer,
+    phase: state.phase,
+    declaredPlayer: state.declaredPlayer,
+    pending: state.pending,
+    lastSwap: state.lastSwap,
+    lastMove: state.lastMove,
+    lastViewed: state.lastViewed,
+    lastPenalty: state.lastPenalty,
+    lastDiscard: state.lastDiscard,
+    follow: state.follow ? { discarder: state.follow.discarder, targetScore: state.follow.targetScore } : null,
+    finalRemaining: state.finalRemaining,
+    winner: state.winner,
+    settleBonus: state.settleBonus,
+    totalScores: meta.totalScores,
+    gamesPlayed: meta.gamesPlayed,
+    followWindowMs: meta.followWindowMs,
+    aiControlled: meta.aiControlled,
+    declareBonus: meta.declareBonus,
   };
 }

@@ -53,8 +53,45 @@ export interface ClientGameView {
   followWindowMs: number;
   /** 对局中已被托管（退出/掉线）的玩家 id 列表：其他玩家可见"托管中"标志 */
   aiControlled: number[];
+  /** 是否启用定牌奖励（客户端据此显示牌堆上方的奖励门槛提示） */
+  declareBonus: boolean;
+  /** 本局定牌奖励分（0/1/2，结算页拆解"手牌分−定牌奖励=总分"用） */
+  settleBonus: number;
 }
 
+
+/** 观战视图（全牌面）：观战者不在本局中，可看到所有玩家手牌与操作（方案A） */
+export interface WatchView {
+  type: 'watchView';
+  roomCode: string;
+  /** 全牌面玩家（槽位含牌面；score 在 end 阶段有值） */
+  players: { id: number; name: string; avatar?: string; isBot: boolean; slots: (Card | null)[]; score?: number }[];
+  deckCount: number;
+  discardPile: Card[];
+  usedPile: Card[];
+  currentPlayer: number;
+  phase: Phase;
+  declaredPlayer: number | null;
+  /** 挂起交互（全牌面，不脱敏） */
+  pending: PendingAction | null;
+  lastSwap: GameState['lastSwap'];
+  lastMove: GameState['lastMove'];
+  lastViewed: GameState['lastViewed'];
+  lastPenalty: GameState['lastPenalty'];
+  lastDiscard: GameState['lastDiscard'];
+  /** 跟弃窗口公开信息（谁弃的、同分多少；不泄露他人决策细节） */
+  follow: { discarder: number; targetScore: number } | null;
+  finalRemaining: number;
+  winner: number[] | null;
+  /** 本局定牌奖励（结算页拆解用） */
+  settleBonus: number;
+  /** 是否启用定牌奖励（观战也显示牌堆上方奖励门槛提示） */
+  declareBonus: boolean;
+  totalScores: Record<number, number>;
+  gamesPlayed: number;
+  followWindowMs: number;
+  aiControlled: number[];
+}
 export type ClientMessage =
   | { type: 'createRoom'; name: string; avatar?: string; config?: Partial<GameConfig> }
   | { type: 'joinRoom'; code: string; name: string; avatar?: string; config?: Partial<GameConfig> }
@@ -67,7 +104,9 @@ export type ClientMessage =
   | { type: 'rejoin'; code: string; playerId: number; name: string; avatar?: string; config?: Partial<GameConfig> }
   | { type: 'emoji'; emoji: string }
   | { type: 'leave' }
-  | { type: 'exitGame' };
+  | { type: 'exitGame' }
+  | { type: 'watchRoom'; code: string }
+  | { type: 'watchLeave' };
 
 export type ServerMessage =
   | {
@@ -105,6 +144,9 @@ export type ServerMessage =
       inGame: boolean;
     }
   | { type: 'view'; view: ClientGameView }
+  | { type: 'watchStart'; code: string; hostName: string }
+  | { type: 'watchView'; view: WatchView }
+  | { type: 'watchClosed'; message: string }
   | { type: 'roomClosed'; message: string }
   | { type: 'emoji'; from: number; emoji: string }
   | { type: 'error'; message: string };

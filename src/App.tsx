@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import GameScreen from './components/GameScreen';
 import OnlineFlow from './components/OnlineFlow';
+import WatchScreen from './components/WatchScreen';
 import { loadAvatar } from './components/AvatarPicker';
 
 export interface GameConfigUI {
@@ -23,9 +24,14 @@ export interface GameConfigUI {
 export default function App() {
   // 教学局：唯一本地入口（不联网，固定剧本教学）
   const [guidedCfg, setGuidedCfg] = useState<GameConfigUI | null>(null);
+  // 观战：点击开放房间中"对局中"的房间进入（独立连接，不占座位）
+  const [watchCode, setWatchCode] = useState<string | null>(null);
 
   if (guidedCfg) {
     return <GameScreen config={guidedCfg} onExit={() => setGuidedCfg(null)} />;
+  }
+  if (watchCode) {
+    return <WatchScreen code={watchCode} onExit={() => setWatchCode(null)} />;
   }
   // 主页 = 联机大厅（创建/加入房间为主入口，教学局为次级入口）
   return (
@@ -33,6 +39,7 @@ export default function App() {
       onGuided={() =>
         setGuidedCfg({ playerCount: 2, botCount: 1, guided: true, botMemory: 0.4, avatars: [loadAvatar()] })
       }
+      onWatch={setWatchCode}
     />
   );
 }

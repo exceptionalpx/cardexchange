@@ -46,6 +46,7 @@ function makeState(hands: Card[][]): GameState {
     finalRemaining: 0,
     winner: null,
     declaredDeckCount: undefined,
+    settleBonus: 0,
     allowSelfFollow: true,
     declareBonus: false,
     botMemory: 0,

@@ -65,6 +65,12 @@ const GUIDE_TIP: Record<string, string> = {
 /** 摸到普通分数牌：讲解弃牌规则（引导局教学） */
 const GUIDE_PLAIN = '这是分数牌：可直接弃掉（弃掉后相同分数可跟弃），或替换手牌里的牌';
 
+/** 定牌奖励门槛（张数，与引擎 ratio>=0.6 / >=0.35 一致，向上取整） */
+function bonusThresholds(playerCount: number): { n2: number; n1: number } {
+  const initDeck = 54 - 4 * playerCount;
+  return { n2: Math.ceil(initDeck * 0.6), n1: Math.ceil(initDeck * 0.35) };
+}
+
 /**
  * 计算翻看/明换展示中需要强制正面的牌。
  * 信息隐藏：只有"真人"发动者（revealDone.viewer / confirmReveal 时 currentPlayer）能看到牌面；
@@ -312,6 +318,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
   );
 
   const deckCount = isOnline && online ? online.view.deckCount : state.deck.length;
+  const declareBonusOn = isOnline && online ? online.view.declareBonus : state.declareBonus;
   const pend = state.pending;
   const selectableSelf =
     pend?.kind === 'chooseSelfSlot' ||
@@ -486,6 +493,29 @@ export default function GameScreen({ config, online, onExit }: Props) {
             </div>
           )}
           <div className="center-area">
+            {config?.guided && state.phase === 'deal' && (
+              <div className="guided-card">
+                <div className="guided-card-title">🎓 教学局开始</div>
+                <ul>
+                  <li>目标：终局手牌总分<b>最小</b>者胜（并列同时胜出）</li>
+                  <li>计分：大小王 0 分 · ♥K −1 分 · A~K = 1~13 分</li>
+                  <li>每人 4 张牌：看牌后盖牌，之后<b>凭记忆</b>打牌，不可再翻看</li>
+                </ul>
+              </div>
+            )}
+            {config?.guided && state.phase === 'playing' && !state.pending && !state.follow && (() => {
+              const humanId = state.players.findIndex((p) => !p.isBot);
+              if (state.currentPlayer !== humanId) return null;
+              return <div className="guided-tip">💡 轮到你：可摸牌；也可宣布<b>定牌</b>（之后其他人各操作一轮，亮牌总分最小者胜）</div>;
+            })()}
+            {declareBonusOn && (() => {
+              const { n2, n1 } = bonusThresholds(state.players.length);
+              return (
+                <div className="declare-bonus-hint">
+                  定牌奖励：牌堆剩余 ≥{n2} 张 −2 分 · ≥{n1} 张 −1 分
+                </div>
+              );
+            })()}
             <div className="deck-stub">
               <div className="deck-stack" aria-hidden>
                 <div className="deck-card deck-card-1" />
@@ -504,7 +534,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
               return <div className="guided-tip">💡 {isFunc ? (GUIDE_TIP[r] ?? "") : GUIDE_PLAIN}</div>;
             })()}
             {config?.guided && state.phase === "follow" && state.follow && (
-              <div className="guided-tip">💡 有玩家弃牌了：手中有相同分数牌的玩家可以跟弃（抢先成功；抢弃失败会罚补 1 张牌）</div>
+              <div className="guided-tip">💡 有玩家弃牌了：手中有相同分数牌的玩家可在 {Math.round((config.followWindowMs ?? 3000) / 1000)} 秒内跟弃（点自己手牌下的"弃"抢先成功；失败罚补 1 张；点"放弃"可提前关闭窗口）</div>
             )}
           </div>
 

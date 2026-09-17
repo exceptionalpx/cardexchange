@@ -10,6 +10,8 @@ import { loadAvatar } from './AvatarPicker';
 interface Props {
   /** 直接开始引导局（固定剧本 + 新手机器人） */
   onGuided: () => void;
+  /** 点击开放房间中"对局中"房间 → 进入观战 */
+  onWatch: (code: string) => void;
 }
 
 interface SavedSession {
@@ -37,7 +39,7 @@ interface RoomView {
   gamesPlayed: number;
   inGame: boolean;
 }
-export default function OnlineFlow({ onGuided }: Props) {
+export default function OnlineFlow({ onGuided, onWatch }: Props) {
   const netRef = useRef<Net | null>(null);
   const [net, setNet] = useState<Net | null>(null);
   const [inGame, setInGame] = useState(false);
@@ -203,6 +205,7 @@ export default function OnlineFlow({ onGuided }: Props) {
       onGuided={onGuided}
       saved={savedSession}
       initialRoom={pendingRoom}
+      onWatch={onWatch}
     />
   );
 }

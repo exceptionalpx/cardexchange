@@ -1391,3 +1391,141 @@ body {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* ===== 首页：创建/加入折叠入口 ===== */
+.lobby-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 560px;
+  margin: 4px auto 0;
+}
+.lobby-entry .btn {
+  width: 100%;
+}
+
+/* 开放房间：对局中可点击观战 */
+.room-item-watch {
+  border-color: rgba(95, 200, 255, 0.6);
+  background: rgba(95, 200, 255, 0.12);
+  cursor: pointer;
+}
+.room-item-watch:hover:not(:disabled) {
+  border-color: #5fc8ff;
+  background: rgba(95, 200, 255, 0.22);
+}
+
+/* ===== 牌堆上方定牌奖励门槛提示 ===== */
+.declare-bonus-hint {
+  font-size: 12px;
+  color: #ffd76a;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 215, 106, 0.35);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+/* ===== 引导局教学卡（开局） ===== */
+.guided-card {
+  max-width: 460px;
+  width: 92vw;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 215, 106, 0.4);
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.guided-card-title {
+  font-weight: 700;
+  color: #ffd76a;
+  margin-bottom: 4px;
+}
+.guided-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.guided-card b {
+  color: #ffd76a;
+}
+
+/* ===== 观战界面 ===== */
+.watch-screen {
+  width: 100%;
+}
+.watch-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto 12px;
+  flex-wrap: wrap;
+}
+.watch-top-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  flex-wrap: wrap;
+}
+.watch-action {
+  font-size: 13px;
+  color: #cfe6ff;
+  background: rgba(40, 80, 140, 0.35);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-top: 6px;
+  text-align: center;
+}
+.watch-drawn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #ffe9a8;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-top: 6px;
+}
+.watch-drawn .card {
+  transform: scale(0.75);
+  transform-origin: left center;
+}
+.follow-banner {
+  font-size: 13px;
+  color: #ffd76a;
+  background: rgba(120, 80, 0, 0.3);
+  border: 1px solid rgba(255, 215, 106, 0.35);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-top: 6px;
+  text-align: center;
+}
+.result-watch {
+  width: 100%;
+  max-width: 560px;
+  margin: 16px auto 0;
+}
+.result-row-win {
+  border-color: #f5c542 !important;
+  background: rgba(245, 197, 66, 0.14) !important;
+}
+
+/* ===== 结算拆解（手牌分 − 定牌奖励 = 总分） ===== */
+.result-score-breakdown {
+  font-size: 14px;
+  color: #ffd76a;
+}
+
+/* 观战座位宽度（不操作，可稍大些展示牌面） */
+.watch-screen .seat-slots .card-slot {
+  min-width: 52px;
+}

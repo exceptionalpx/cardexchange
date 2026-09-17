@@ -46,7 +46,13 @@ export default function ResultScreen({
                   ))}
                 </div>
                 <div className={`result-score ${isWinner ? 'result-score-win' : ''}`}>
-                  总分：{p.score}
+                  {state.settleBonus > 0 && p.id === state.declaredPlayer ? (
+                    <span className="result-score-breakdown">
+                      手牌 {(p.score ?? 0) + state.settleBonus} − 定牌奖励 {state.settleBonus} = 总分 {p.score}
+                    </span>
+                  ) : (
+                    <>总分：{p.score}</>
+                  )}
                 </div>
               </div>
             );

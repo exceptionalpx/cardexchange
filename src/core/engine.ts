@@ -121,6 +121,7 @@ export function createGame(config: GameConfig, rng: () => number = Math.random):
     animSeq: 0,
     finalRemaining: 0,
     declaredDeckCount: undefined,
+    settleBonus: 0,
     allowSelfFollow: config.allowSelfFollow !== false,
     declareBonus: !!config.declareBonus,
     botMemory: config.botMemory ?? 0,
@@ -770,6 +771,7 @@ export function settle(state: GameState): GameState {
   return {
     ...state,
     players,
+    settleBonus: bonus,
     phase: 'end',
     pending: null,
     follow: null,
