@@ -245,17 +245,18 @@ export default function GameScreen({ config, online, onExit }: Props) {
     return () => clearInterval(iv);
   }, [state.phase, state.follow, followWindowMs]);
 
-  // ---- 音效：摸牌/盖牌/看牌/换牌/替换/弃牌/罚牌/定牌/跟弃成功（按 animSeq 与状态变化各触发一次） ----
-  const animSeqRef = useRef(0);
+  // ---- 音效：摸牌/盖牌/看牌/换牌/替换/弃牌/罚牌/定牌/跟弃成功（按动画事件 seq 与状态变化各触发一次） ----
+  // 联机视图不含 animSeq，改用 lastSwap/lastMove/lastPenalty 各自的 seq 组合键防重（本地/联机通用）
+  const animKeyRef = useRef('');
   const prevPendingKindRef = useRef<string | null>(null);
   const prevDeclaredRef = useRef<number | null>(null);
   const prevDealKeyRef = useRef<string | null>(null);
   const prevFollowSubRef = useRef<number | null>(null);
   useEffect(() => {
-    // 动画事件：lastSwap / lastMove / lastPenalty（animSeq 递增防重）
-    const seq = state.animSeq;
-    if (seq !== animSeqRef.current) {
-      animSeqRef.current = seq;
+    // 动画事件：与别人换牌 / 主动弃牌 / 替换手牌 / 跟弃失败罚牌（seq 递增防重）
+    const animKey = `${state.lastSwap?.seq ?? 0}|${state.lastMove?.seq ?? 0}|${state.lastPenalty?.seq ?? 0}`;
+    if (animKey !== animKeyRef.current) {
+      animKeyRef.current = animKey;
       if (state.lastSwap) {
         playSfx('swap_other'); // 与别人换牌（J/Q/K）
       } else if (state.lastMove) {

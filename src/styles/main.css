@@ -1904,3 +1904,36 @@ body {
   font-size: 13px;
   color: var(--muted, #6b7a6e);
 }
+
+/* 全局错误边界：渲染异常时显示可恢复界面（不白屏） */
+.error-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+.error-card {
+  max-width: 480px;
+  width: 100%;
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  text-align: center;
+}
+.error-card h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+.error-detail {
+  margin: 10px 0 16px;
+  padding: 10px 12px;
+  background: #f8f4ef;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #7a4a21;
+  text-align: left;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
