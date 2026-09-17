@@ -320,6 +320,8 @@ function declare(state: GameState): GameState {
     ...state,
     phase: 'final',
     declaredPlayer: dp,
+    // 定牌奖励：记录定牌时牌堆剩余张数（settle 按占比给 −1/−2）
+    declaredDeckCount: state.deck.length,
     currentPlayer: nextPlayer(state, dp),
     finalRemaining: others,
     pending: null,

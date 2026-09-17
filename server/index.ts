@@ -8,23 +8,26 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientMessage } from './protocol';
 import {
   addBot,
-  broadcastRoom,
   broadcastEmoji,
+  broadcastRoom,
   broadcastView,
   canStart,
   clearTimers,
   createRoom,
+  exitGame,
   genCode,
   handleAction,
   joinRoom,
+  leaveRoom,
   removeBot,
   restartGame,
-  Room,
   roomLiteInfo,
   seatInfo,
   setReady,
   startGame,
+  uncontrol,
 } from './rooms';
+import type { Room } from './rooms';
 
 const PORT = Number(process.env.PORT || 3001);
 const DIST_DIR = fileURLToPath(new URL('../dist', import.meta.url));
@@ -104,7 +107,19 @@ function onDisconnect(ws: WebSocket): void {
   const seat = room.seats[meta.seatId];
   // 只清掉仍属于自己的连接（同座位重连后，旧连接断开不影响新连接）
   if (seat && seat.ws === ws) seat.ws = null;
-  // 对局中掉线：座位保留等待重连，挂起的真人决策由超时自动推进
+  // 对局中掉线：座位保留等待重连，回合交给服务器托管（AI 代打，不卡局）
+  if (room.state && seat) {
+    const pid = room.pidBySeat?.[seat.id] ?? -1;
+    if (pid >= 0 && !seat.isBot) {
+      room.aiControlled.add(pid);
+      // 发牌阶段掉线：自动确认盖牌（否则发牌阶段会卡住）
+      if (room.state.phase === 'deal' && !room.state.dealConfirmed[pid]) {
+        handleAction(room, pid, { type: 'CONFIRM_DEAL', playerId: pid });
+      } else {
+        broadcastView(room);
+      }
+    }
+  }
   if (!room.state) {
     broadcastRoom(room);
   }
@@ -133,6 +148,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         canStart: canStart(room),
         totalScores: room.totalScores,
         gamesPlayed: room.gamesPlayed,
+        inGame: false,
       });
       return;
     }
@@ -164,6 +180,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         canStart: canStart(room),
         totalScores: room.totalScores,
         gamesPlayed: room.gamesPlayed,
+        inGame: false,
       });
       broadcastRoom(room);
       return;
@@ -211,6 +228,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         seat.name = msg.name.trim() || seat.name;
         seat.avatar = msg.avatar;
         seat.ws = ws;
+        seat.left = false;
         connMeta.set(ws, { code, seatId: msg.playerId });
         if (!room.state) {
           send(ws, {
@@ -222,11 +240,13 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
             canStart: canStart(room),
             totalScores: room.totalScores,
             gamesPlayed: room.gamesPlayed,
+            inGame: false,
           });
           broadcastRoom(room);
         } else {
           // 对局中重连：myId 用对局内玩家 id（view.viewerId 口径一致）
           const pid = room.pidBySeat?.[msg.playerId] ?? -1;
+          if (pid >= 0) uncontrol(room, pid); // 真人重进，解除托管
           send(ws, { type: 'gameStart', myId: pid });
           send(ws, {
             type: 'roomUpdate',
@@ -236,6 +256,7 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
             canStart: canStart(room),
             totalScores: room.totalScores,
             gamesPlayed: room.gamesPlayed,
+            inGame: true,
           });
           broadcastView(room);
         }
@@ -265,6 +286,48 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       const pid = room.pidBySeat?.[meta.seatId] ?? -1;
       if (pid < 0) return;
       handleAction(room, pid, msg.action);
+      return;
+    }
+    case 'leave': {
+      const meta = connMeta.get(ws);
+      if (!meta) return;
+      const room = rooms.get(meta.code);
+      if (!room) return;
+      leaveRoom(room, meta.seatId);
+      broadcastRoom(room);
+      const humans = room.seats.filter((s) => !s.isBot);
+      if (!room.state && humans.every((s) => !s.ws)) {
+        clearTimers(room);
+        rooms.delete(room.code);
+      }
+      return;
+    }
+    case 'exitGame': {
+      const meta = connMeta.get(ws);
+      if (!meta) return;
+      const room = rooms.get(meta.code);
+      if (!room) return;
+      if (!room.state) return; // 仅对局中可退出对局
+      if (!exitGame(room, meta.seatId)) return;
+      // 发牌阶段退出：自动确认盖牌（否则发牌阶段会卡住）
+      const epid = room.pidBySeat?.[meta.seatId] ?? -1;
+      if (room.state.phase === 'deal' && epid >= 0 && !room.state.dealConfirmed[epid]) {
+        handleAction(room, epid, { type: 'CONFIRM_DEAL', playerId: epid });
+      }
+      // 退出者：回房间等待页（含房间数据，房间页显示"对局进行中"+回到对局入口）
+      send(ws, {
+        type: 'exitGame',
+        code: room.code,
+        playerId: meta.seatId,
+        hostId: room.hostId,
+        seats: seatInfo(room),
+        canStart: canStart(room),
+        totalScores: room.totalScores,
+        gamesPlayed: room.gamesPlayed,
+        inGame: true,
+      });
+      // 其他玩家：刷新视图（看到托管标志）
+      broadcastView(room);
       return;
     }
     case 'emoji': {

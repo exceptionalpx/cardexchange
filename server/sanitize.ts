@@ -38,7 +38,12 @@ export function sanitizePending(
 export function buildClientView(
   state: GameState,
   viewerId: number,
-  meta?: { totalScores: Record<number, number>; gamesPlayed: number; config?: Partial<GameConfig> },
+  meta?: {
+    totalScores: Record<number, number>;
+    gamesPlayed: number;
+    config?: Partial<GameConfig>;
+    aiControlled?: number[];
+  },
 ): ClientGameView {
   return {
     viewerId,
@@ -72,5 +77,6 @@ export function buildClientView(
     totalScores: meta?.totalScores ?? {},
     gamesPlayed: meta?.gamesPlayed ?? 0,
     followWindowMs: meta?.config?.followWindowMs ?? 3000,
+    aiControlled: meta?.aiControlled ?? [],
   };
 }

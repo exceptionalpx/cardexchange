@@ -51,6 +51,8 @@ export interface ClientGameView {
   gamesPlayed: number;
   /** 跟弃窗口时长（客户端倒计时用，来自房间设置） */
   followWindowMs: number;
+  /** 对局中已被托管（退出/掉线）的玩家 id 列表：其他玩家可见"托管中"标志 */
+  aiControlled: number[];
 }
 
 export type ClientMessage =
@@ -63,7 +65,9 @@ export type ClientMessage =
   | { type: 'action'; action: Action }
   | { type: 'restart' }
   | { type: 'rejoin'; code: string; playerId: number; name: string; avatar?: string; config?: Partial<GameConfig> }
-  | { type: 'emoji'; emoji: string };
+  | { type: 'emoji'; emoji: string }
+  | { type: 'leave' }
+  | { type: 'exitGame' };
 
 export type ServerMessage =
   | {
@@ -75,6 +79,7 @@ export type ServerMessage =
       canStart: boolean;
       totalScores: Record<number, number>;
       gamesPlayed: number;
+      inGame: boolean;
     }
   | {
       type: 'roomUpdate';
@@ -84,8 +89,21 @@ export type ServerMessage =
       canStart: boolean;
       totalScores: Record<number, number>;
       gamesPlayed: number;
+      inGame: boolean;
     }
   | { type: 'gameStart'; myId: number }
+  | {
+      type: 'exitGame';
+      code: string;
+      playerId: number;
+      hostId: number;
+      seats: RoomSeatInfo[];
+      canStart: boolean;
+      totalScores: Record<number, number>;
+      gamesPlayed: number;
+      /** 是否仍在对局中（true=对局进行中，可回到对局） */
+      inGame: boolean;
+    }
   | { type: 'view'; view: ClientGameView }
   | { type: 'roomClosed'; message: string }
   | { type: 'emoji'; from: number; emoji: string }

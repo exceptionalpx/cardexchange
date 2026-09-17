@@ -17,6 +17,26 @@ interface SavedSession {
   playerId: number;
   name: string;
 }
+
+interface RoomSeatView {
+  id: number;
+  name: string;
+  isBot: boolean;
+  avatar?: string;
+  taken: boolean;
+  ready: boolean;
+}
+
+interface RoomView {
+  code: string;
+  seats: RoomSeatView[];
+  canStart: boolean;
+  hostId: number;
+  myId: number;
+  totalScores: Record<number, number>;
+  gamesPlayed: number;
+  inGame: boolean;
+}
 export default function OnlineFlow({ onGuided }: Props) {
   const netRef = useRef<Net | null>(null);
   const [net, setNet] = useState<Net | null>(null);
@@ -25,6 +45,12 @@ export default function OnlineFlow({ onGuided }: Props) {
   const [hostId, setHostId] = useState(-1);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [emojiEvent, setEmojiEvent] = useState<{ from: number; label: string; ts: number } | null>(null);
+  /** 本地保存的会话：首页显示"回到对局"入口（不自动重进） */
+  const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
+  /** 退出对局时服务器回执的房间数据（对局进行中） */
+  const [pendingRoom, setPendingRoom] = useState<RoomView | null>(null);
+  /** 已退出对局：忽略广播的 view 消息（否则会被拉回对局） */
+  const exitedRef = useRef(false);
 
   useEffect(() => {
     const n = new Net();
@@ -33,15 +59,30 @@ export default function OnlineFlow({ onGuided }: Props) {
     const off = n.onMessage((msg) => {
       switch (msg.type) {
         case 'gameStart': {
+          exitedRef.current = false;
           setInGame(true);
           break;
         }
         case 'view':
           setView(msg.view);
-          setInGame(true);
+          if (!exitedRef.current) setInGame(true);
           break;
         case 'emoji':
           setEmojiEvent({ from: msg.from, label: msg.emoji, ts: Date.now() });
+          break;
+        case 'exitGame':
+          exitedRef.current = true;
+          setInGame(false);
+          setPendingRoom({
+            code: msg.code,
+            seats: msg.seats,
+            canStart: msg.canStart,
+            hostId: msg.hostId,
+            myId: msg.playerId ?? 0,
+            totalScores: msg.totalScores ?? {},
+            gamesPlayed: msg.gamesPlayed ?? 0,
+            inGame: msg.inGame,
+          });
           break;
         case 'joined':
           setHostId(msg.hostId);
@@ -56,13 +97,13 @@ export default function OnlineFlow({ onGuided }: Props) {
         // StrictMode 双挂载：只有本实例仍存活时才生效
         if (cancelled) return;
         setNet(n);
-        // 自动重连上次会话
+        // 不自动重进：本地保存的会话用于首页"回到对局"入口（由玩家选择）
         const raw = localStorage.getItem(ONLINE_KEY);
         if (raw) {
           try {
             const saved = JSON.parse(raw) as SavedSession;
             const savedAvatar = loadAvatar();
-            n.send({ type: 'rejoin', code: saved.code, playerId: saved.playerId, name: saved.name, avatar: savedAvatar });
+            setSavedSession(saved);
             n.setResume(() => ({
               type: 'rejoin',
               code: saved.code,
@@ -98,6 +139,11 @@ export default function OnlineFlow({ onGuided }: Props) {
 
   const restart = useCallback(() => {
     netRef.current?.send({ type: 'restart' });
+  }, []);
+
+  /** 对局中退出：座位保留、回合由服务器托管，回到房间等待页 */
+  const onExitGame = useCallback(() => {
+    netRef.current?.send({ type: 'exitGame' });
   }, []);
 
   const leave = useCallback(() => {
@@ -142,12 +188,21 @@ export default function OnlineFlow({ onGuided }: Props) {
           emojiEvent,
           onRestart: restart,
           canRestart: view.viewerId === hostId,
-          onExit: leave,
+          onExit: onExitGame,
+          onExitGame,
         }}
         onExit={leave}
       />
     );
   }
 
-  return <LobbyScreen net={net} onEnterGame={() => setInGame(true)} onGuided={onGuided} />;
+  return (
+    <LobbyScreen
+      net={net}
+      onEnterGame={() => setInGame(true)}
+      onGuided={onGuided}
+      saved={savedSession}
+      initialRoom={pendingRoom}
+    />
+  );
 }

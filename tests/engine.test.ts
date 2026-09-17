@@ -967,3 +967,29 @@ describe('引导局固定牌序', () => {
     expect(ranks).toEqual(['7', '9', 'J', 'K']);
   });
 });
+
+describe('定牌奖励（declare 记录牌堆剩余，settle 结算减分）', () => {
+  it('定牌时牌堆剩余 ≥60%：结算时定牌者手牌总分 −2', () => {
+    const init = createGame({ playerCount: 2, botCount: 0, playerNames: ['甲', '乙'], declareBonus: true });
+    // 完成发牌（真人直接确认）
+    let g = applyAction(init, { type: 'CONFIRM_DEAL', playerId: 0 });
+    g = applyAction(g, { type: 'CONFIRM_DEAL', playerId: 1 });
+    // 定牌：牌堆剩余 54 - 8 = 46（>= 60%）
+    g = applyAction(g, { type: 'DECLARE' });
+    expect(g.declaredDeckCount).toBe(g.deck.length);
+    const end = settle(g);
+    const declared = end.players[end.declaredPlayer!];
+    const rawScore = handScore(declared.handSlots);
+    expect(declared.score).toBe(rawScore - 2);
+  });
+
+  it('未开启定牌奖励：不结算减分', () => {
+    const init = createGame({ playerCount: 2, botCount: 0, playerNames: ['甲', '乙'], declareBonus: false });
+    let g = applyAction(init, { type: 'CONFIRM_DEAL', playerId: 0 });
+    g = applyAction(g, { type: 'CONFIRM_DEAL', playerId: 1 });
+    g = applyAction(g, { type: 'DECLARE' });
+    const end = settle(g);
+    const declared = end.players[end.declaredPlayer!];
+    expect(declared.score).toBe(handScore(declared.handSlots));
+  });
+});

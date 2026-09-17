@@ -8,6 +8,7 @@ import type { ClientGameView } from '../../server/protocol';
 import PlayerSeat from './PlayerSeat';
 import ActionPanel from './ActionPanel';
 import LogPanel from './LogPanel';
+import RulesPanel from './RulesPanel';
 import DiscardPile from './DiscardPile';
 import UsedPile from './UsedPile';
 import ResultScreen from './ResultScreen';
@@ -27,6 +28,8 @@ export interface OnlineGameProps {
   /** 收到的他人表情事件（from=对局内玩家 id） */
   emojiEvent?: { from: number; label: string; ts: number } | null;
   onExit: () => void;
+  /** 对局中退出（联机）：座位保留、服务器托管，回到房间页 */
+  onExitGame?: () => void;
 }
 
 interface Props {
@@ -120,6 +123,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // 快捷表情 toast（本机显示）
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
   const toastIdRef = useRef(0);
+  // 表情消息已处理守卫：state.players 每次变化都会触发 effect，防止同一条消息重复弹
+  const lastEmojiTsRef = useRef(0);
   const showToast = useCallback((text: string) => {
     const id = ++toastIdRef.current;
     setToasts((ts) => [...ts, { id, text }]);
@@ -267,10 +272,28 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }
   }, [state.phase, state.players, isOnline]);
 
+  // ---- 其他玩家进入托管（退出对局/掉线）→ 提示 ----
+  const aiControlled = isOnline && online ? new Set(online.view.aiControlled ?? []) : new Set<number>();
+  const lastAiRef = useRef<string>('');
+  useEffect(() => {
+    if (isOnline && aiControlled.size > 0) {
+      const ids = [...aiControlled].sort().join(',');
+      if (ids !== lastAiRef.current) {
+        lastAiRef.current = ids;
+        const names = [...aiControlled]
+          .map((id) => state.players[id]?.name ?? `玩家${id + 1}`)
+          .join('、');
+        showToast(`${names} 已退出对局，由托管代打`);
+      }
+    }
+  }, [isOnline, aiControlled, state.players, showToast]);
+
   // ---- 收到他人快捷表情 → 本地 toast ----
   useEffect(() => {
     if (!online?.emojiEvent) return;
     const ev = online.emojiEvent;
+    if (ev.ts <= lastEmojiTsRef.current) return; // 已处理过，避免重复弹
+    lastEmojiTsRef.current = ev.ts;
     const name = state.players[ev.from]?.name ?? `玩家${ev.from + 1}`;
     showToast(`${name}：${ev.label}`);
   }, [online?.emojiEvent, state.players, showToast]);
@@ -393,25 +416,12 @@ export default function GameScreen({ config, online, onExit }: Props) {
             记录
           </button>
         </div>
-        <button className="btn btn-small" onClick={onExit}>
+        <button className="btn btn-small" onClick={() => (online ? online.onExitGame?.() : onExit())}>
           退出
         </button>
       </div>
 
-      {showRules && (
-        <div className="rules-panel">
-          <div className="pile-label">规则</div>
-          <ul>
-            <li>定牌后手牌总分<b>最小</b>者胜（并列同胜）</li>
-            <li>大小王 0 分 · ♥K -1 分 · A~K = 1~13</li>
-            <li>7/8 看自己 · 9/10 看别人 · J/Q 暗换 · K 明换</li>
-            <li>弃牌不补牌；同分可跟弃，抢先成功，失败罚补 1 张</li>
-            <li>自己回合可定牌，其余人各操作一轮后终局</li>
-            <li>定牌奖励（可开关）：定牌时牌堆剩余 ≥60% 手牌总分 −2，≥35% −1</li>
-            <li>牌堆耗尽：总分最低者胜</li>
-          </ul>
-        </div>
-      )}
+      {showRules && <RulesPanel />}
 
       {/* 快捷表情：按钮展开 + 自定义输入 */}
       <button className="emoji-fab" onClick={() => setEmojiOpen((v) => !v)} aria-label="快捷表情">
@@ -518,6 +528,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
                   onSlotClick={(slot) => handleSlotClick(vp.id, slot)}
                   showDiscard={showDiscard}
                   onDiscard={(slot) => dispatch({ type: 'TRY_FOLLOW', playerId: vp.id, slot })}
+                  aiControlled={aiControlled.has(vp.id)}
                 />
               );
             })}

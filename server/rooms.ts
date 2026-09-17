@@ -17,6 +17,8 @@ export interface Seat {
   ws: WebSocket | null;
   /** 真人准备状态（机器人恒 true） */
   ready: boolean;
+  /** 对局中退出：座位保留、已托管，房间页仍视为已占 */
+  left?: boolean;
 }
 
 export interface Room {
@@ -34,6 +36,8 @@ export interface Room {
   scoringDone: boolean;
   /** 房间游戏设置（跟弃窗口/定牌奖励/跟弃自己/机器人难度） */
   config: Partial<GameConfig>;
+  /** 对局中被托管的玩家 id（退出/掉线后由服务器 AI 代打，重进解除） */
+  aiControlled: Set<number>;
 }
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -70,6 +74,7 @@ export function createRoom(code: string, name: string, avatar?: string, config: 
     gamesPlayed: 0,
     scoringDone: false,
     config,
+    aiControlled: new Set(),
   };
 }
 
@@ -108,6 +113,35 @@ export function removeBot(room: Room): boolean {
   return true;
 }
 
+/** 对局中退出：座位保留，玩家回合交给服务器托管；返回是否成功 */
+export function exitGame(room: Room, seatId: number): boolean {
+  if (!room.state) return false;
+  const pid = room.pidBySeat?.[seatId] ?? -1;
+  if (pid < 0) return false;
+  room.aiControlled.add(pid);
+  // 断开服务端座位连接：座位保留（托管代打），重进时重新绑定
+  room.seats[seatId].ws = null;
+  room.seats[seatId].left = true;
+  return true;
+}
+
+/** 解除托管（玩家重进对局时调用）；同时移除对该玩家的托管标记 */
+export function uncontrol(room: Room, pid: number): void {
+  room.aiControlled.delete(pid);
+}
+
+/** 离开房间（仅大厅状态）：清空该真人座位；对局中不可离开 */
+export function leaveRoom(room: Room, seatId: number): boolean {
+  if (room.state) return false;
+  const seat = room.seats[seatId];
+  if (!seat || seat.isBot || !seat.ws) return false;
+  seat.name = '';
+  seat.avatar = undefined;
+  seat.ready = false;
+  seat.ws = null;
+  return true;
+}
+
 /** 真人切换准备状态；机器人/对局中忽略 */
 export function setReady(room: Room, seatId: number, ready: boolean): boolean {
   if (room.state) return false;
@@ -123,7 +157,7 @@ export function seatInfo(room: Room): RoomSeatInfo[] {
     name: s.name,
     isBot: s.isBot,
     avatar: s.avatar,
-    taken: s.isBot || !!s.ws,
+    taken: s.isBot || !!s.ws || !!s.left,
     ready: s.ready,
   }));
 }
@@ -175,8 +209,8 @@ function schedule(room: Room): void {
   const cur = state.players[state.currentPlayer];
 
   // 发牌阶段：机器人开局已确认（createGame dealConfirmed=true），真人各自点击确认，无需服务器调度
-  // 正常回合：机器人决策
-  if ((state.phase === 'playing' || state.phase === 'final') && cur.isBot) {
+  // 正常回合：机器人决策；已退出/掉线的真人由服务器托管（AI 代打）
+  if ((state.phase === 'playing' || state.phase === 'final') && (cur.isBot || room.aiControlled.has(cur.id))) {
     room.timers.add(setTimeout(() => step(room, aiDecide(state, cur.id)), 700));
     return;
   }
@@ -187,9 +221,11 @@ function schedule(room: Room): void {
     room.timers.add(setTimeout(() => step(room, { type: 'REVEAL_DONE' }), delay));
     return;
   }
-  // K 明换：机器人自动决策；真人决定界面始终可见（不自动，等玩家操作）
+  // K 明换：机器人/托管真人自动决策；真人决定界面始终可见（不自动，等玩家操作）
   if (state.pending?.kind === 'confirmReveal') {
-    if (cur.isBot) room.timers.add(setTimeout(() => step(room, aiDecide(state, cur.id)), 500));
+    if (cur.isBot || room.aiControlled.has(cur.id)) {
+      room.timers.add(setTimeout(() => step(room, aiDecide(state, cur.id)), 500));
+    }
     return;
   }
   // 跟弃窗口：机器人随机反应 0.5~2.5s；真人未决策 4 秒视为放弃
@@ -198,7 +234,7 @@ function schedule(room: Room): void {
     for (const [idStr, d] of Object.entries(state.follow.decisions)) {
       const id = Number(idStr);
       if (d !== 'pending') continue;
-      if (state.players[id].isBot) {
+      if (state.players[id].isBot || room.aiControlled.has(id)) {
         room.timers.add(setTimeout(() => step(room, aiDecide(state, id)), 500 + Math.random() * 2000));
       } else {
         hasHumanPending = true;
@@ -211,7 +247,7 @@ function schedule(room: Room): void {
           if (!s || s.phase !== 'follow' || !s.follow) return;
           let ns = s;
           for (const [idStr, d] of Object.entries(s.follow.decisions)) {
-            if (d === 'pending' && !s.players[Number(idStr)].isBot) {
+            if (d === 'pending' && !s.players[Number(idStr)].isBot && !room.aiControlled.has(Number(idStr))) {
               ns = applyAction(ns, { type: 'PASS_FOLLOW', playerId: Number(idStr) });
             }
           }
@@ -281,6 +317,7 @@ export function startGame(room: Room): void {
     return i >= 0 ? i : -1;
   });
   room.scoringDone = false;
+  room.aiControlled = new Set();
   room.state = createGame({
     ...room.config,
     playerCount: count,
@@ -303,6 +340,7 @@ export function restartGame(room: Room): void {
     return i >= 0 ? i : -1;
   });
   room.scoringDone = false;
+  room.aiControlled = new Set();
   room.state = createGame({
     ...room.config,
     playerCount: count,
@@ -347,7 +385,12 @@ export function broadcastView(room: Room): void {
     seat.ws.send(
       JSON.stringify({
         type: 'view',
-        view: buildClientView(state, pid, { totalScores: metaTotal, gamesPlayed: room.gamesPlayed, config: room.config }),
+        view: buildClientView(state, pid, {
+          totalScores: metaTotal,
+          gamesPlayed: room.gamesPlayed,
+          config: room.config,
+          aiControlled: [...room.aiControlled],
+        }),
       }),
     );
   }
@@ -381,6 +424,7 @@ export function broadcastRoom(room: Room): void {
         canStart: canStartFlag,
         totalScores,
         gamesPlayed,
+        inGame: !!room.state,
       }),
     );
   }

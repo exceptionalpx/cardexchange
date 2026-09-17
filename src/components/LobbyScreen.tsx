@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Net } from '../net/socket';
 import type { RoomSeatInfo } from '../../server/protocol';
 import AvatarPicker, { loadAvatar, AVATAR_KEY } from './AvatarPicker';
+import RulesPanel from './RulesPanel';
 
 export const ONLINE_KEY = 'cardexchange-online';
 
@@ -22,22 +23,35 @@ interface RoomView {
   myId: number;
   totalScores: Record<number, number>;
   gamesPlayed: number;
+  /** 是否对局进行中（对局中退出回房间页时 true） */
+  inGame: boolean;
+}
+
+/** 本地保存的会话（用于首页"回到对局"入口） */
+interface SavedSession {
+  code: string;
+  playerId: number;
+  name: string;
 }
 
 interface Props {
   net: Net;
   /** 服务器下发 gameStart（对局开始），切换到牌桌 */
   onEnterGame: () => void;
-  /** 热座模式（本地配置页） */
   /** 引导局（直接开始教学对局） */
   onGuided: () => void;
+  /** 本地保存的会话：首页显示"回到对局"入口（不自动重进，由玩家选择） */
+  saved?: SavedSession | null;
+  /** 退出对局回房间页时传入的房间数据（对局进行中） */
+  initialRoom?: RoomView | null;
 }
-export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
+export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initialRoom }: Props) {
   const [name, setName] = useState(() => localStorage.getItem('cardexchange-name') ?? '');
   const [avatar, setAvatar] = useState(loadAvatar());
   const [joinCode, setJoinCode] = useState('');
   const [room, setRoom] = useState<RoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
   const [openRooms, setOpenRooms] = useState<OpenRoom[]>([]);
   // 建房房间设置（创建时随 createRoom 下发）
   const [createFollowMs, setCreateFollowMs] = useState(3000);
@@ -70,6 +84,11 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
     return () => clearInterval(t);
   }, [room, loadRooms]);
 
+  // 退出对局回到房间页：用服务器回执的房间数据初始化房间视图
+  useEffect(() => {
+    if (initialRoom) setRoom(initialRoom);
+  }, [initialRoom]);
+
   useEffect(() => {
     const off = net.onMessage((msg) => {
       switch (msg.type) {
@@ -83,6 +102,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
             myId: msg.playerId,
             totalScores: msg.totalScores ?? {},
             gamesPlayed: msg.gamesPlayed ?? 0,
+            inGame: false,
           });
           setError(null);
           localStorage.setItem('cardexchange-name', nameRef.current);
@@ -108,6 +128,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
             myId: prev?.myId ?? myIdRef.current,
             totalScores: msg.totalScores ?? {},
             gamesPlayed: msg.gamesPlayed ?? 0,
+            inGame: msg.inGame ?? false,
           }));
           setError(null);
           break;
@@ -129,8 +150,23 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
   }, [net]);
 
   function leave() {
+    net.send({ type: 'leave' });
     localStorage.removeItem(ONLINE_KEY);
     net.setResume(null);
+    setRoom(null);
+    setError(null);
+  }
+
+  /** 回到对局（对局中退出后重进 / 首页入口）：复用 rejoin，由服务器决定进对局还是房间 */
+  function rejoin() {
+    const raw = localStorage.getItem(ONLINE_KEY);
+    if (!raw) return;
+    try {
+      const savedSession = JSON.parse(raw) as SavedSession;
+      net.send({ type: 'rejoin', code: savedSession.code, playerId: savedSession.playerId, name: savedSession.name, avatar: loadAvatar() });
+    } catch {
+      localStorage.removeItem(ONLINE_KEY);
+    }
   }
 
   if (room) {
@@ -144,6 +180,9 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
       <div className="menu lobby">
         <h1 className="menu-title">房间 {room.code}</h1>
         <p className="menu-sub">把房间码告诉朋友即可加入 · 机器人可由房主添加</p>
+        {room.inGame && (
+          <p className="hint hint-warn">对局进行中（其他人还在玩）· 你已退出，回合由服务器托管，可随时回到对局</p>
+        )}
 
         <div className="room-seats">
           {room.seats.map((s) => (
@@ -179,7 +218,14 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
         )}
 
         <div className="menu-actions">
-          {isHost ? (
+          {room.inGame ? (
+            <>
+              <button className="btn btn-big btn-primary" onClick={rejoin}>
+                回到对局
+              </button>
+              <p className="hint">对局结束后可正常参与下一局</p>
+            </>
+          ) : isHost ? (
             <>
               <button
                 className="btn"
@@ -210,7 +256,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
           ) : (
             <p className="hint">等待房主开始游戏…</p>
           )}
-          {me && !me.isBot && (
+          {!room.inGame && me && !me.isBot && (
             <button
               className="btn btn-big"
               onClick={() => net.send({ type: 'ready', ready: !me.ready })}
@@ -218,9 +264,11 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
               {me.ready ? '取消准备' : '准备'}
             </button>
           )}
-          <button className="btn btn-big" onClick={leave}>
-            离开房间
-          </button>
+          {!room.inGame && (
+            <button className="btn btn-big" onClick={leave}>
+              离开房间
+            </button>
+          )}
         </div>
         {error && <p className="hint hint-error">{error}</p>}
       </div>
@@ -231,6 +279,25 @@ export default function LobbyScreen({ net, onEnterGame, onGuided }: Props) {
     <div className="menu lobby">
       <h1 className="menu-title">♠ 换牌王 ♥</h1>
       <p className="menu-sub">公网联机 · 创建房间后可添加机器人或等待朋友加入</p>
+
+      {saved && (
+        <div className="menu-section">
+          <button className="btn btn-big btn-primary" onClick={rejoin}>
+            回到对局 {saved.code}
+          </button>
+          <p className="hint">你有一个进行中的对局，点击回到对局继续游玩</p>
+        </div>
+      )}
+
+      <div className="menu-section">
+        <button
+          className={`btn ${showRules ? 'btn-active' : ''}`}
+          onClick={() => setShowRules((v) => !v)}
+        >
+          规则
+        </button>
+        {showRules && <RulesPanel inline />}
+      </div>
 
       <div className="menu-section">
         <label>昵称</label>

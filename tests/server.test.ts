@@ -17,6 +17,9 @@ import {
   setReady,
   startGame,
   handleAction,
+  exitGame,
+  uncontrol,
+  leaveRoom,
 } from '../server/rooms';
 
 function toState(s: unknown): GameState {
@@ -332,5 +335,68 @@ describe('视角脱敏 sanitize', () => {
     const v1 = buildClientView(followState, 1);
     expect(v1.follow?.canFollow).toBe(true); // 玩家 1 是 pending
     expect((v1.follow as unknown as { decisions?: unknown }).decisions).toBeUndefined();
+  });
+});
+
+describe('退出对局与托管', () => {
+  it('exitGame：对局中退出 → 该玩家进入托管集合；非对局返回 false', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    expect(exitGame(room, 0)).toBe(false); // 未开局不能退出对局
+    startGame(room);
+    expect(room.state).toBeTruthy();
+    expect(exitGame(room, 0)).toBe(true);
+    expect(room.aiControlled.has(0)).toBe(true); // 房主 pid=0 进入托管
+  });
+
+  it('uncontrol：真人重进对局时解除托管', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    exitGame(room, 0);
+    expect(room.aiControlled.has(0)).toBe(true);
+    uncontrol(room, 0);
+    expect(room.aiControlled.has(0)).toBe(false);
+  });
+
+  it('leaveRoom：仅大厅状态清空座位（名字/准备/连接）；对局中拒绝', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    expect(leaveRoom(room, 0)).toBe(true);
+    expect(room.seats[0].name).toBe('');
+    expect(room.seats[0].ws).toBeNull();
+    expect(room.seats[0].ready).toBe(false);
+    // 对局中不可离开房间
+    const room2 = createRoom('EFGH', '小明');
+    room2.seats[0].ws = {} as never;
+    addBot(room2);
+    setReady(room2, 0, true);
+    startGame(room2);
+    expect(leaveRoom(room2, 0)).toBe(false);
+  });
+
+  it('buildClientView：透传 aiControlled（托管标志对局内所有玩家可见）', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    exitGame(room, 0);
+    const st = room.state;
+    if (!st) throw new Error('state 缺失');
+    const v0 = buildClientView(st, 1, {
+      totalScores: {},
+      gamesPlayed: 0,
+      config: room.config,
+      aiControlled: [...room.aiControlled],
+    });
+    expect(v0.aiControlled).toContain(0);
+    expect(v0.aiControlled).toHaveLength(1);
   });
 });

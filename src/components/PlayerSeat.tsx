@@ -10,6 +10,8 @@ interface Props {
   /** 是否显示每张手牌下方的"弃"按钮（跟弃用，整局常驻） */
   showDiscard?: boolean;
   onDiscard?: (slot: number) => void;
+  /** 是否处于托管状态（退出/掉线，由服务器 AI 代打） */
+  aiControlled?: boolean;
 }
 
 export default function PlayerSeat({
@@ -20,6 +22,7 @@ export default function PlayerSeat({
   onSlotClick,
   showDiscard,
   onDiscard,
+  aiControlled,
 }: Props) {
   return (
     <div
@@ -32,6 +35,7 @@ export default function PlayerSeat({
         {isCurrent && <span className="badge">行动中</span>}
         {isDeclared && <span className="badge badge-declared">已定牌</span>}
         {player.isBot && <span className="badge badge-bot">AI</span>}
+        {aiControlled && <span className="badge badge-ai">托管中</span>}
       </div>
       <div className="seat-slots">
         {player.slots.map((s, i) => (
