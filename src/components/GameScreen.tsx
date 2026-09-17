@@ -277,13 +277,15 @@ export default function GameScreen({ config, online, onExit }: Props) {
       if (state.declaredPlayer !== null) playSfx('declare');
     }
     // 盖牌（dealConfirmed 出现 true 时播一次；首次渲染不播）
-    const dealKey = state.dealConfirmed.join(',');
+    // 联机视图含 dealConfirmed；防御性兜底防止 undefined
+    const dealKey = (state.dealConfirmed ?? []).join(',');
     if (dealKey !== prevDealKeyRef.current) {
       if (prevDealKeyRef.current !== null && dealKey.includes('true')) playSfx('card_cover');
       prevDealKeyRef.current = dealKey;
     }
     // 跟弃成功：跟弃窗口关闭时存在提交成功者
-    const sub = state.follow?.submitted.length ?? 0;
+    // 注意：联机视图的 follow 不含 submitted（只有本地引擎状态才有），必须防御
+    const sub = Array.isArray(state.follow?.submitted) ? state.follow.submitted.length : 0;
     if (prevFollowSubRef.current !== null && prevFollowSubRef.current > 0 && !state.follow) {
       playSfx('follow_success');
     }

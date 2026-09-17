@@ -25,6 +25,7 @@ const BGM_DEFAULT = 0.4;
 const SFX_DEFAULT = 0.7;
 
 let bgm: HTMLAudioElement | null = null;
+let visibilityBound = false;
 let bgmVolume = loadVolume(BGM_KEY, BGM_DEFAULT);
 let sfxVolume = loadVolume(SFX_KEY, SFX_DEFAULT);
 const sfxCache = new Map<SfxName, HTMLAudioElement>();
@@ -62,6 +63,19 @@ export function unlockAudio(): void {
       },
       { once: true },
     );
+    // 页面隐藏（切走/关闭其他换牌王标签页）时暂停 BGM，回到页面自动恢复：
+    // 避免多个标签页/后台播放串音；真正关闭整个标签页时音频随页面一并销毁
+    if (!visibilityBound) {
+      visibilityBound = true;
+      document.addEventListener('visibilitychange', () => {
+        if (!bgm) return;
+        if (document.hidden) {
+          bgm.pause();
+        } else {
+          void bgm.play().catch(() => {});
+        }
+      });
+    }
     void bgm.play().catch(() => {});
   } catch {
     /* 音频不可用时静默 */
