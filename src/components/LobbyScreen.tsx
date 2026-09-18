@@ -3,12 +3,7 @@ import type { Net } from '../net/socket';
 import type { RoomSeatInfo } from '../../server/protocol';
 import AvatarPicker, { loadAvatar, AVATAR_KEY } from './AvatarPicker';
 import RulesPanel from './RulesPanel';
-import {
-  getBgmVolume,
-  getSfxVolume,
-  setBgmVolume,
-  setSfxVolume,
-} from '../core/sfx';
+import SettingsModal, { applyTheme, loadTheme } from './SettingsModal';
 
 export const ONLINE_KEY = 'cardexchange-online';
 
@@ -27,8 +22,6 @@ const AVATAR_NAMES: Record<string, string> = {
   '🦄': '小独角兽',
   '🐯': '小老虎',
 };
-
-export const THEME_KEY = 'cardexchange-theme';
 
 /** GET /api/rooms 返回的开放房间摘要 */
 interface OpenRoom {
@@ -85,13 +78,6 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const [openPanel, setOpenPanel] = useState<'create' | 'join' | null>(null);
   /** 设置弹窗（主题 + 音量） */
   const [settingsOpen, setSettingsOpen] = useState(false);
-  /** 主题：经典风（默认）/ 可爱风 */
-  const [theme, setTheme] = useState<'cute' | 'classic'>(
-    () => (localStorage.getItem(THEME_KEY) as 'cute' | 'classic') || 'classic',
-  );
-  /** 背景音乐 / 游戏音效音量（0~100，与 sfx.ts 持久化同步） */
-  const [bgmVol, setBgmVol] = useState(() => Math.round(getBgmVolume() * 100));
-  const [sfxVol, setSfxVol] = useState(() => Math.round(getSfxVolume() * 100));
   /** 昵称是否由系统按头像自动填充（自动填的动物名跟随头像变动；手动输入过的不覆盖） */
   const [nameAuto, setNameAuto] = useState(
     () => localStorage.getItem('cardexchange-name-auto') === '1',
@@ -111,11 +97,10 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const roomRef = useRef<RoomView | null>(null);
   roomRef.current = room;
 
-  // 主题切换：写入 <html data-theme> + localStorage
+  // 进入大厅即应用已保存的主题（SettingsModal 打开时也可实时切换）
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
+    applyTheme(loadTheme());
+  }, []);
 
   function changeAvatar(v: string) {
     setAvatar(v);
@@ -581,71 +566,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
       )}
 
       {/* 设置弹窗（主题 + 音量；点遮罩不关，防误触丢选择；✕ 关闭） */}
-      {settingsOpen && (
-        <div className="modal">
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h2>⚙️ 设置</h2>
-              <button className="btn btn-small" onClick={() => setSettingsOpen(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="settings-group">
-              <div className="settings-label">🌿 页面风格</div>
-              <div className="theme-pick">
-                <button
-                  className={theme === 'classic' ? 'btn btn-primary' : 'btn'}
-                  onClick={() => setTheme('classic')}
-                >
-                  🌿 经典风（深绿牌桌）
-                </button>
-                <button
-                  className={theme === 'cute' ? 'btn btn-primary' : 'btn'}
-                  onClick={() => setTheme('cute')}
-                >
-                  🎀 可爱风（奶油绿）
-                </button>
-              </div>
-            </div>
-            <div className="settings-group">
-              <div className="settings-label">🎵 背景音乐音量</div>
-              <div className="settings-slider">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={bgmVol}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setBgmVol(v);
-                    setBgmVolume(v / 100);
-                  }}
-                  aria-label="背景音乐音量"
-                />
-                <span className="settings-val">{bgmVol}%</span>
-              </div>
-            </div>
-            <div className="settings-group">
-              <div className="settings-label">🔔 游戏音效音量</div>
-              <div className="settings-slider">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={sfxVol}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setSfxVol(v);
-                    setSfxVolume(v / 100);
-                  }}
-                  aria-label="游戏音效音量"
-                />
-                <span className="settings-val">{sfxVol}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
     </div>
   );

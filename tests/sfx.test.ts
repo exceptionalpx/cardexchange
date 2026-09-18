@@ -31,16 +31,18 @@ describe('sfx Web Audio', () => {
     vi.restoreAllMocks();
   });
 
-  it('unlockAudio 创建上下文并预解码（fetch 全部音效）', async () => {
+  it('unlockAudio 创建上下文并预解码（fetch 全部音效 + BGM）', async () => {
     const fetchMock = mockFetchOk();
     const sfx = await loadSfx();
     sfx.unlockAudio();
-    // 等待 fetch → arrayBuffer → decodeAudioData → buffers.set 完成
+    // 等待 fetch → arrayBuffer → decodeAudioData → buffers/bgm 完成
     await new Promise((r) => setTimeout(r, 30));
     const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    // 12 个音效 + BGM mp3（mock 成功时不回退 wav）
     expect(urls.length).toBeGreaterThanOrEqual(12);
     expect(urls).toContain('/sfx/card_draw.wav');
     expect(urls).toContain('/sfx/follow_fail.wav');
+    expect(urls).toContain('/sfx/bgm.mp3');
   });
 
   it('同一音效 150ms 内去重，间隔后再次触发可播放', async () => {
@@ -54,19 +56,20 @@ describe('sfx Web Audio', () => {
 
     sfx.unlockAudio();
     await new Promise((r) => setTimeout(r, 30));
+    const baseline = spy.mock.calls.length; // 含 BGM 的一次 source 创建
 
     // 连续两次立即调用：第二次被 150ms 去重吞掉 → 只播一次
     sfx.playSfx('card_draw');
     sfx.playSfx('card_draw');
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls.length - baseline).toBe(1);
 
     // 间隔 160ms 后再触发 → 正常播放
     await new Promise((r) => setTimeout(r, 160));
     sfx.playSfx('card_draw');
-    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy.mock.calls.length - baseline).toBe(2);
   });
 
-  it('setSfxVolume 更新 GainNode 音量（ctx 只创建一次）', async () => {
+  it('setBgmVolume / setSfxVolume 更新各自 GainNode（unlock 时各创建一次）', async () => {
     mockFetchOk();
     const sfx = await loadSfx();
 
@@ -76,11 +79,12 @@ describe('sfx Web Audio', () => {
     const gainSpy = vi.spyOn(proto.prototype, 'createGain');
 
     sfx.unlockAudio();
-    sfx.unlockAudio(); // 幂等：ctx 已存在时不重建
-    expect(gainSpy).toHaveBeenCalledTimes(1);
+    sfx.unlockAudio(); // 幂等：ctx/gain 已存在时不重建
+    // sfxGain + bgmGain 各一个
+    expect(gainSpy).toHaveBeenCalledTimes(2);
 
     // 音量设置不抛错（内部 GainNode.gain.value 被写入）
-    expect(() => sfx.setSfxVolume(0.3)).not.toThrow();
+    expect(() => sfx.setBgmVolume(0.3)).not.toThrow();
     expect(() => sfx.setSfxVolume(0.5)).not.toThrow();
   });
 });

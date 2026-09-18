@@ -28,6 +28,10 @@ class MockAudioContext {
     this.state = 'running';
     return Promise.resolve();
   }
+  suspend() {
+    this.state = 'suspended';
+    return Promise.resolve();
+  }
   createGain() {
     return new MockGainNode();
   }

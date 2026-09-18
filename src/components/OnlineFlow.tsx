@@ -157,6 +157,11 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
     netRef.current?.send({ type: 'exitGame' });
   }, []);
 
+  /** 主动托管开关：开启后本玩家回合由服务器 AI 代打，可随时关闭 */
+  const setAutopilot = useCallback((on: boolean) => {
+    netRef.current?.send({ type: 'setAutopilot', on });
+  }, []);
+
   const leave = useCallback(() => {
     localStorage.removeItem(ONLINE_KEY);
     netRef.current?.setResume(null);
@@ -201,6 +206,7 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
           canRestart: view.viewerId === hostId,
           onExit: onExitGame,
           onExitGame,
+          setAutopilot,
         }}
         onExit={leave}
       />

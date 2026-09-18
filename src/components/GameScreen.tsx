@@ -15,6 +15,7 @@ import ResultScreen from './ResultScreen';
 import SwapAnim from './SwapAnim';
 import MoveAnim from './MoveAnim';
 import PeekAnim from './PeekAnim';
+import SettingsModal from './SettingsModal';
 import { playSfx } from '../core/sfx';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
@@ -31,6 +32,8 @@ export interface OnlineGameProps {
   onExit: () => void;
   /** 对局中退出（联机）：座位保留、服务器托管，回到房间页 */
   onExitGame?: () => void;
+  /** 主动托管开关（联机）：开启后本玩家回合由服务器 AI 代打，可随时关闭 */
+  setAutopilot?: (on: boolean) => void;
 }
 
 interface Props {
@@ -118,6 +121,8 @@ export default function GameScreen({ config, online, onExit }: Props) {
   // 规则/游戏进程面板：点击按钮展开，默认收起
   const [showRules, setShowRules] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  // 对局中设置弹窗（页面风格/音量/托管）
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [emojiText, setEmojiText] = useState("");
   // 热座/单机多局累计（本地 localStorage）
@@ -333,21 +338,22 @@ export default function GameScreen({ config, online, onExit }: Props) {
     }
   }, [state.phase, state.players, isOnline]);
 
-  // ---- 其他玩家进入托管（退出对局/掉线）→ 提示 ----
+  // ---- 其他玩家进入托管（退出对局/掉线/主动托管）→ 提示（不含自己，自己在设置里可见） ----
   const aiControlled = isOnline && online ? new Set(online.view.aiControlled ?? []) : new Set<number>();
   const lastAiRef = useRef<string>('');
   useEffect(() => {
     if (isOnline && aiControlled.size > 0) {
-      const ids = [...aiControlled].sort().join(',');
-      if (ids !== lastAiRef.current) {
+      const others = [...aiControlled].filter((id) => id !== online?.myId).sort();
+      const ids = others.join(',');
+      if (others.length > 0 && ids !== lastAiRef.current) {
         lastAiRef.current = ids;
-        const names = [...aiControlled]
+        const names = others
           .map((id) => state.players[id]?.name ?? `玩家${id + 1}`)
           .join('、');
-        showToast(`${names} 已退出对局，由托管代打`);
+        showToast(`${names} 已进入托管（AI 代打）`);
       }
     }
-  }, [isOnline, aiControlled, state.players, showToast]);
+  }, [isOnline, aiControlled, state.players, showToast, online?.myId]);
 
   // ---- 收到他人快捷表情 → 本地 toast ----
   useEffect(() => {
@@ -480,6 +486,9 @@ export default function GameScreen({ config, online, onExit }: Props) {
             onClick={() => setShowLog((v) => !v)}
           >
             记录
+          </button>
+          <button className="btn btn-small" onClick={() => setSettingsOpen(true)}>
+            ⚙️ 设置
           </button>
         </div>
         <button className="btn btn-small" onClick={() => (online ? online.onExitGame?.() : onExit())}>
@@ -640,6 +649,32 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
         {showLog && <LogPanel state={state} />}
       </div>
+
+      {/* 对局中设置弹窗：页面风格 / BGM 音量 / 音效音量 / 托管开关（仅联机） */}
+      {settingsOpen && (
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          extra={
+            isOnline && online?.setAutopilot ? (
+              (() => {
+                const myControlled = online.view.aiControlled?.includes(online.myId) ?? false;
+                return (
+                  <div className="settings-group">
+                    <div className="settings-label">🤖 托管（AI 代打你的回合）</div>
+                    <button
+                      className={myControlled ? 'btn btn-primary' : 'btn'}
+                      onClick={() => online.setAutopilot?.(!myControlled)}
+                    >
+                      {myControlled ? '托管中 · 点击关闭' : '开启托管'}
+                    </button>
+                    <p className="hint">开启后你的回合由 AI 自动决策，可随时关闭</p>
+                  </div>
+                );
+              })()
+            ) : undefined
+          }
+        />
+      )}
     </div>
   );
 }

@@ -38,6 +38,8 @@ export interface Room {
   config: Partial<GameConfig>;
   /** 对局中被托管的玩家 id（退出/掉线后由服务器 AI 代打，重进解除） */
   aiControlled: Set<number>;
+  /** 主动托管：玩家在对局中开启"托管"后由 AI 代打（在线但挂机，可随时关闭） */
+  autopilot: Set<number>;
   /** 观战者连接（不占座位，订阅本房间全牌面对局广播） */
   watchers: Set<WebSocket>;
   /** 无真人延时关房计时器（方案B：60 秒等待重连） */
@@ -79,6 +81,7 @@ export function createRoom(code: string, name: string, avatar?: string, config: 
     scoringDone: false,
     config,
     aiControlled: new Set(),
+    autopilot: new Set(),
     watchers: new Set(),
   };
 }
@@ -133,6 +136,23 @@ export function exitGame(room: Room, seatId: number): boolean {
 /** 解除托管（玩家重进对局时调用）；同时移除对该玩家的托管标记 */
 export function uncontrol(room: Room, pid: number): void {
   room.aiControlled.delete(pid);
+}
+
+/** 主动托管开关：玩家在线时让 AI 代打（on=false 恢复手动）。开启时立即重新调度，
+ *  若正轮到该玩家则按 AI 逻辑自动推进，避免停在等待真人操作。 */
+export function setAutopilot(room: Room, pid: number, on: boolean): void {
+  if (on) {
+    room.autopilot.add(pid);
+    // 发牌阶段开启托管：自动确认盖牌（否则对局会卡在盖牌等待）
+    if (room.state?.phase === 'deal' && !room.state.dealConfirmed[pid] && !room.state.players[pid].isBot) {
+      handleAction(room, pid, { type: 'CONFIRM_DEAL', playerId: pid });
+      return; // handleAction 已触发 schedule + broadcastView
+    }
+  } else {
+    room.autopilot.delete(pid);
+  }
+  schedule(room);
+  broadcastView(room);
 }
 
 /** 离开房间（仅大厅状态）：清空该真人座位；对局中不可离开 */
@@ -215,8 +235,11 @@ function schedule(room: Room): void {
   const cur = state.players[state.currentPlayer];
 
   // 发牌阶段：机器人开局已确认（createGame dealConfirmed=true），真人各自点击确认，无需服务器调度
-  // 正常回合：机器人决策；已退出/掉线的真人由服务器托管（AI 代打）
-  if ((state.phase === 'playing' || state.phase === 'final') && (cur.isBot || room.aiControlled.has(cur.id))) {
+  // 正常回合：机器人决策；已退出/掉线/主动托管的真人由服务器 AI 代打
+  if (
+    (state.phase === 'playing' || state.phase === 'final') &&
+    (cur.isBot || room.aiControlled.has(cur.id) || room.autopilot.has(cur.id))
+  ) {
     room.timers.add(setTimeout(() => step(room, aiDecide(state, cur.id)), 700));
     return;
   }
@@ -229,7 +252,7 @@ function schedule(room: Room): void {
   }
   // K 明换：机器人/托管真人自动决策；真人决定界面始终可见（不自动，等玩家操作）
   if (state.pending?.kind === 'confirmReveal') {
-    if (cur.isBot || room.aiControlled.has(cur.id)) {
+    if (cur.isBot || room.aiControlled.has(cur.id) || room.autopilot.has(cur.id)) {
       room.timers.add(setTimeout(() => step(room, aiDecide(state, cur.id)), 500));
     }
     return;
@@ -240,7 +263,7 @@ function schedule(room: Room): void {
     for (const [idStr, d] of Object.entries(state.follow.decisions)) {
       const id = Number(idStr);
       if (d !== 'pending') continue;
-      if (state.players[id].isBot || room.aiControlled.has(id)) {
+      if (state.players[id].isBot || room.aiControlled.has(id) || room.autopilot.has(id)) {
         room.timers.add(setTimeout(() => step(room, aiDecide(state, id)), 500 + Math.random() * 2000));
       } else {
         hasHumanPending = true;
@@ -253,7 +276,12 @@ function schedule(room: Room): void {
           if (!s || s.phase !== 'follow' || !s.follow) return;
           let ns = s;
           for (const [idStr, d] of Object.entries(s.follow.decisions)) {
-            if (d === 'pending' && !s.players[Number(idStr)].isBot && !room.aiControlled.has(Number(idStr))) {
+            if (
+              d === 'pending' &&
+              !s.players[Number(idStr)].isBot &&
+              !room.aiControlled.has(Number(idStr)) &&
+              !room.autopilot.has(Number(idStr))
+            ) {
               ns = applyAction(ns, { type: 'PASS_FOLLOW', playerId: Number(idStr) });
             }
           }
@@ -324,6 +352,7 @@ export function startGame(room: Room): void {
   });
   room.scoringDone = false;
   room.aiControlled = new Set();
+  room.autopilot = new Set();
   room.state = createGame({
     ...room.config,
     playerCount: count,
@@ -347,6 +376,7 @@ export function restartGame(room: Room): void {
   });
   room.scoringDone = false;
   room.aiControlled = new Set();
+  room.autopilot = new Set();
   room.state = createGame({
     ...room.config,
     playerCount: count,
@@ -395,7 +425,7 @@ export function broadcastView(room: Room): void {
           totalScores: metaTotal,
           gamesPlayed: room.gamesPlayed,
           config: room.config,
-          aiControlled: [...room.aiControlled],
+          aiControlled: [...room.aiControlled, ...room.autopilot],
         }),
       }),
     );
@@ -407,7 +437,7 @@ export function broadcastView(room: Room): void {
       totalScores: metaTotal,
       gamesPlayed: room.gamesPlayed,
       followWindowMs: room.config.followWindowMs ?? 3000,
-      aiControlled: [...room.aiControlled],
+      aiControlled: [...room.aiControlled, ...room.autopilot],
       declareBonus: !!room.config.declareBonus,
     });
     for (const w of room.watchers) {

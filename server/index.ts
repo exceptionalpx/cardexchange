@@ -23,6 +23,7 @@ import {
   restartGame,
   roomLiteInfo,
   seatInfo,
+  setAutopilot,
   setReady,
   startGame,
   uncontrol,
@@ -371,6 +372,17 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       broadcastView(room);
       // 对局中真人全退出：延时关房（60 秒重连窗口）
       maybeCloseEmpty(room);
+      return;
+    }
+    case 'setAutopilot': {
+      const meta = connMeta.get(ws);
+      if (!meta) return;
+      const room = rooms.get(meta.code);
+      if (!room || !room.state) return;
+      const pid = room.pidBySeat?.[meta.seatId] ?? -1;
+      if (pid < 0) return;
+      // 主动托管：开启后由服务器 AI 代打，可随时关闭（开启时若正轮到该玩家立即自动推进）
+      setAutopilot(room, pid, msg.on);
       return;
     }
     case 'emoji': {

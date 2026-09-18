@@ -1815,6 +1815,24 @@ body {
 [data-theme='classic'] .seat-current {
   background: rgba(20, 90, 60, 0.75);
 }
+/* 经典风：房间等待页座位卡/徽章/设置区也改深色面板（浅奶白底+近白字看不清） */
+[data-theme='classic'] .room-seat {
+  background: rgba(8, 50, 32, 0.72);
+  color: var(--text);
+}
+[data-theme='classic'] .room-seat-me {
+  background: rgba(60, 110, 60, 0.72);
+  border-color: var(--gold);
+}
+[data-theme='classic'] .badge {
+  background: rgba(8, 50, 32, 0.82);
+  border-color: rgba(240, 248, 241, 0.28);
+  color: var(--text);
+}
+[data-theme='classic'] .room-settings {
+  background: rgba(8, 50, 32, 0.45);
+  color: var(--text);
+}
 /* 经典风：结算卡片与底部操作条也加深色面板（避免浅底+近白文字的对比度问题，
    以及底部操作条在深绿桌布上像"白色长方形"的突兀感） */
 [data-theme='classic'] .result-card,
