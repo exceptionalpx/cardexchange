@@ -1815,6 +1815,32 @@ body {
 [data-theme='classic'] .seat-current {
   background: rgba(20, 90, 60, 0.75);
 }
+/* 经典风：结算卡片与底部操作条也加深色面板（避免浅底+近白文字的对比度问题，
+   以及底部操作条在深绿桌布上像"白色长方形"的突兀感） */
+[data-theme='classic'] .result-card,
+[data-theme='classic'] .action-panel {
+  background: rgba(8, 50, 32, 0.85);
+  color: var(--text);
+}
+[data-theme='classic'] .action-panel {
+  border-top-color: rgba(240, 248, 241, 0.22);
+}
+[data-theme='classic'] .result-card {
+  border-color: var(--green-light);
+}
+/* 经典风：结算卡片内部子卡片/标题也换深色底或亮色标题，保证对比度 */
+[data-theme='classic'] .result-title {
+  color: var(--gold);
+}
+[data-theme='classic'] .result-player,
+[data-theme='classic'] .result-total-item {
+  background: rgba(20, 90, 60, 0.6);
+  color: var(--text);
+}
+[data-theme='classic'] .result-total-lead {
+  background: rgba(246, 201, 69, 0.22);
+  border-color: rgba(246, 201, 69, 0.6);
+}
 /* 经典风：蓝底牌背（替代粉白圆点） */
 [data-theme='classic'] .card-back,
 [data-theme='classic'] .deck-card {

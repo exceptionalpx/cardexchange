@@ -1,8 +1,13 @@
 /**
- * 音效与背景音乐管理。
- * - 背景音乐（bgm）与游戏音效（sfx）音量独立调节，持久化 localStorage
- * - 默认开启：bgm 0.4（氛围低音量，与音效和谐）、sfx 0.7
- * - iOS Safari 自动播放限制：首次用户交互（pointerdown）后解锁并启动 BGM
+ * 音效与背景音乐管理（Web Audio 方案）。
+ * - 背景音乐（bgm）用 HTMLAudioElement 循环播放（长音频不需要低延迟）
+ * - 游戏音效（sfx）用 Web Audio API：预解码为 AudioBuffer，播放时
+ *   AudioBufferSourceNode.start() 即时发声（延迟 <10ms，替代 HTMLAudioElement
+ *   几十~几百 ms 的启动延迟，解决安卓/苹果"音效慢半拍"）
+ * - iOS Safari 自动播放限制：首次用户交互（pointerdown）内创建并 resume
+ *   AudioContext，同时预解码全部音效，之后任意时机播放均合法
+ * - 同一音效 150ms 内去重，避免动画/事件重复触发导致的连播堆积
+ * - 音量独立持久化 localStorage：bgm 0.4、sfx 0.7
  */
 
 export type SfxName =
@@ -16,19 +21,45 @@ export type SfxName =
   | 'countdown' // 倒计时滴答
   | 'declare' // 定牌
   | 'win' // 获胜
-  | 'follow_fail' // 跟弃失败罚牌
+  | 'follow_fail' // 跟弃失败罚牌（对所有人广播，作为公共提示）
   | 'lose'; // 结算落败
 
 const BGM_KEY = 'cardexchange-bgm-volume';
 const SFX_KEY = 'cardexchange-sfx-volume';
 const BGM_DEFAULT = 0.4;
 const SFX_DEFAULT = 0.7;
+/** 同一音效最短触发间隔（ms）：动画/事件重复触发时丢弃多余播放，避免堆积 */
+const SFX_MIN_GAP = 150;
+
+const SFX_NAMES: SfxName[] = [
+  'card_draw',
+  'card_cover',
+  'peek',
+  'swap_other',
+  'swap_self',
+  'discard',
+  'follow_success',
+  'countdown',
+  'declare',
+  'win',
+  'follow_fail',
+  'lose',
+];
 
 let bgm: HTMLAudioElement | null = null;
 let visibilityBound = false;
+let preloaded = false;
 let bgmVolume = loadVolume(BGM_KEY, BGM_DEFAULT);
 let sfxVolume = loadVolume(SFX_KEY, SFX_DEFAULT);
-const sfxCache = new Map<SfxName, HTMLAudioElement>();
+
+/** Web Audio 上下文（懒创建；iOS 需在用户手势内 resume） */
+let ctx: AudioContext | null = null;
+/** 音效总音量节点（sfxVolume 即时生效） */
+let sfxGain: GainNode | null = null;
+/** 预解码好的音效缓冲 */
+const buffers = new Map<SfxName, AudioBuffer>();
+/** 各音效最近一次播放时间（去重用） */
+const lastPlayedAt = new Map<SfxName, number>();
 
 function loadVolume(key: string, def: number): number {
   try {
@@ -41,9 +72,52 @@ function loadVolume(key: string, def: number): number {
   }
 }
 
-/** 首次用户交互后调用：解锁音频并启动背景音乐循环（只创建一次） */
+function ensureCtx(): AudioContext | null {
+  if (ctx) return ctx;
+  try {
+    const AC: typeof AudioContext | undefined =
+      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return null;
+    ctx = new AC();
+    sfxGain = ctx.createGain();
+    sfxGain.gain.value = sfxVolume;
+    sfxGain.connect(ctx.destination);
+  } catch {
+    ctx = null;
+    sfxGain = null;
+  }
+  return ctx;
+}
+
+/** 预解码全部音效（在首次用户手势内发起；完成后任意时机播放均即时） */
+function preloadSfx(c: AudioContext): void {
+  if (preloaded) return;
+  preloaded = true;
+  for (const name of SFX_NAMES) {
+    fetch(`/sfx/${name}.wav`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`sfx ${name} ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then((buf) => c.decodeAudioData(buf))
+      .then((ab) => {
+        if (ab && ab.duration > 0) buffers.set(name, ab);
+      })
+      .catch(() => {
+        /* 单个音效加载失败不影响其他 */
+      });
+  }
+}
+
+/** 首次用户交互后调用：创建并 resume AudioContext、预解码音效、启动背景音乐（只创建一次） */
 export function unlockAudio(): void {
   try {
+    const c = ensureCtx();
+    if (c && c.state === 'suspended') {
+      void c.resume().catch(() => {});
+    }
+    if (c) preloadSfx(c);
+
     if (bgm) {
       void bgm.play().catch(() => {});
       return;
@@ -82,17 +156,22 @@ export function unlockAudio(): void {
   }
 }
 
-/** 播放一个游戏音效（每次从头播放） */
+/** 播放一个游戏音效（Web Audio 即时发声；同一音效 150ms 内去重） */
 export function playSfx(name: SfxName): void {
   try {
-    let a = sfxCache.get(name);
-    if (!a) {
-      a = new Audio(`/sfx/${name}.wav`);
-      sfxCache.set(name, a);
-    }
-    a.volume = sfxVolume;
-    a.currentTime = 0;
-    void a.play().catch(() => {});
+    const now = performance.now();
+    const last = lastPlayedAt.get(name) ?? 0;
+    if (now - last < SFX_MIN_GAP) return;
+    lastPlayedAt.set(name, now);
+
+    const c = ensureCtx();
+    if (!c || !sfxGain) return;
+    const buf = buffers.get(name);
+    if (!buf) return; // 未解码完成：静默跳过（预热后通常已就绪）
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.connect(sfxGain);
+    src.start(0);
   } catch {
     /* 音频不可用时静默 */
   }
@@ -115,6 +194,7 @@ export function setSfxVolume(v: number): void {
   } catch {
     /* ignore */
   }
+  if (sfxGain) sfxGain.gain.value = v;
 }
 
 export function getBgmVolume(): number {
