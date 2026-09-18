@@ -7,6 +7,7 @@ import PlayerSeat from './PlayerSeat';
 import DiscardPile from './DiscardPile';
 import UsedPile from './UsedPile';
 import CardView from './CardView';
+import { ONLINE_KEY } from './LobbyScreen';
 
 interface Props {
   code: string;
@@ -47,6 +48,25 @@ export default function WatchScreen({ code, onExit }: Props) {
   const netRef = useRef<Net | null>(null);
   // 观战者消息：本机昵称（首页已存）+ 消息面板 + toast
   const watcherNameRef = useRef(localStorage.getItem('cardexchange-name')?.trim() || '观战者');
+  // 携带本地会话座位号：服务器据此识别"本房间对局参与者"，拒绝其观战本房间（防作弊）
+  const watcherPidRef = useRef<number | undefined>(
+    (() => {
+      try {
+        const raw = localStorage.getItem(ONLINE_KEY);
+        if (!raw) return undefined;
+        const s = JSON.parse(raw) as { code: string; playerId: number };
+        return s.code === code ? s.playerId : undefined;
+      } catch {
+        return undefined;
+      }
+    })(),
+  );
+  const watchMsg = (): { type: 'watchRoom'; code: string; name: string; playerId?: number } => ({
+    type: 'watchRoom',
+    code,
+    name: watcherNameRef.current,
+    playerId: watcherPidRef.current,
+  });
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [emojiText, setEmojiText] = useState('');
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
@@ -62,7 +82,7 @@ export default function WatchScreen({ code, onExit }: Props) {
     const net = new Net();
     netRef.current = net;
     // 断线自动重连并重新订阅观战
-    net.setResume(() => ({ type: 'watchRoom', code, name: watcherNameRef.current }));
+    net.setResume(() => watchMsg());
     const off = net.onMessage((msg) => {
       switch (msg.type) {
         case 'watchStart':
@@ -86,7 +106,7 @@ export default function WatchScreen({ code, onExit }: Props) {
     });
     net
       .connect()
-      .then(() => net.send({ type: 'watchRoom', code, name: watcherNameRef.current }))
+      .then(() => net.send(watchMsg()))
       .catch(() => setError('无法连接联机服务器'));
     return () => {
       off();

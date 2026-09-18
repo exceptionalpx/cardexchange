@@ -79,7 +79,8 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
         case 'exitGame':
           exitedRef.current = true;
           setInGame(false);
-          // 对局中退出 → 回首页（首页靠 savedSession 显示"回到对局"入口，不再停留房间等待页）
+          // 主动退出对局 → 回首页；会话已清除，首页不显示"回到对局"入口
+          setSavedSession(null);
           setPendingRoom(null);
           break;
         case 'sessionCheck':
@@ -152,8 +153,11 @@ export default function OnlineFlow({ onGuided, onWatch }: Props) {
     netRef.current?.send({ type: 'restart' });
   }, []);
 
-  /** 对局中退出：座位保留、回合由服务器托管，回到房间等待页 */
+  /** 对局中主动退出：本局不可返回（服务器标记 quit 拒绝 rejoin），座位由 AI 托管代打；
+   *  立即清除本地会话，首页不再显示"回到对局"入口（防"退出→观战看牌→回来"作弊） */
   const onExitGame = useCallback(() => {
+    localStorage.removeItem(ONLINE_KEY);
+    netRef.current?.setResume(null);
     netRef.current?.send({ type: 'exitGame' });
   }, []);
 

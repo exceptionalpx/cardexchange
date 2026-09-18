@@ -19,6 +19,8 @@ export interface Seat {
   ready: boolean;
   /** 对局中退出：座位保留、已托管，房间页仍视为已占 */
   left?: boolean;
+  /** 主动退出对局：本局不可 rejoin（区别于掉线重连），本局结束后座位释放为空位 */
+  quit?: boolean;
 }
 
 export interface Room {
@@ -121,15 +123,17 @@ export function removeBot(room: Room): boolean {
   return true;
 }
 
-/** 对局中退出：座位保留，玩家回合交给服务器托管；返回是否成功 */
+/** 对局中主动退出：座位保留（AI 托管代打到底），标记 quit 使本局不可重进；
+ *  本局结束后 restart 时座位释放为空位。返回是否成功 */
 export function exitGame(room: Room, seatId: number): boolean {
   if (!room.state) return false;
   const pid = room.pidBySeat?.[seatId] ?? -1;
   if (pid < 0) return false;
   room.aiControlled.add(pid);
-  // 断开服务端座位连接：座位保留（托管代打），重进时重新绑定
+  // 断开服务端座位连接：座位保留（托管代打），主动退出标记 quit（不可 rejoin）
   room.seats[seatId].ws = null;
   room.seats[seatId].left = true;
+  room.seats[seatId].quit = true;
   return true;
 }
 
@@ -367,6 +371,10 @@ export function startGame(room: Room): void {
 
 export function restartGame(room: Room): void {
   if (!room.state) return;
+  // 本局结束：释放主动退出者的座位（重新成为空位，可加入下一局）
+  for (const s of room.seats) {
+    if (s.quit) room.seats[s.id] = emptySeat(s.id);
+  }
   const occupied = room.seats.filter((s) => s.isBot || !!s.ws);
   if (occupied.length < 2) return;
   const count = occupied.length;
@@ -445,6 +453,18 @@ export function broadcastView(room: Room): void {
       w.send(JSON.stringify({ type: 'watchView', view: watchView }));
     }
   }
+}
+
+/** 观战准入校验：本房间对局参与者（含已退出/掉线，pid≥0 或 left）禁止观战本房间，
+ *  防止"退出/掉线后观战看到全部牌面，再回到对局"作弊；路人（无 playerId 或不属于本房间）放行。
+ *  返回 null 表示允许，否则为拒绝提示文案。 */
+export function watchAllowed(room: Room, playerId?: number): string | null {
+  if (playerId === undefined) return null;
+  const seat = room.seats[playerId];
+  if (!seat || seat.isBot) return null;
+  const pid = room.pidBySeat?.[playerId] ?? -1;
+  if (pid >= 0 || seat.left) return '你正在参与本局，不能观战';
+  return null;
 }
 
 /** 对局中表情广播：发给同房其他真人（发送者本地自己显示 toast） */

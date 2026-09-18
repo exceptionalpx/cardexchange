@@ -491,7 +491,19 @@ export default function GameScreen({ config, online, onExit }: Props) {
             ⚙️ 设置
           </button>
         </div>
-        <button className="btn btn-small" onClick={() => (online ? online.onExitGame?.() : onExit())}>
+        <button
+          className="btn btn-small"
+          onClick={() => {
+            if (!online) {
+              onExit();
+              return;
+            }
+            // 主动退出 = 放弃本局：确认后服务器拒绝重进，回合由 AI 托管代打
+            if (window.confirm('退出后本局不可再返回，你的回合将由 AI 代打。确定退出吗？')) {
+              online.onExitGame?.();
+            }
+          }}
+        >
           退出
         </button>
       </div>

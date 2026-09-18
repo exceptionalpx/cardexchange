@@ -106,7 +106,7 @@ export type ClientMessage =
   | { type: 'leave' }
   | { type: 'exitGame' }
   | { type: 'setAutopilot'; on: boolean }
-  | { type: 'watchRoom'; code: string; name?: string }
+  | { type: 'watchRoom'; code: string; name?: string; playerId?: number }
   | { type: 'watchLeave' }
   | { type: 'checkSession'; code: string; playerId: number }
   | { type: 'watchEmoji'; code: string; text: string };

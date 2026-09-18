@@ -27,6 +27,7 @@ import {
   setReady,
   startGame,
   uncontrol,
+  watchAllowed,
 } from './rooms';
 import type { Room } from './rooms';
 
@@ -259,6 +260,11 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       }
       const seat = room.seats[msg.playerId];
       if (!seat.isBot) {
+        // 主动退出对局（quit）：本局不可重进，防止"退出→观战看到牌→回来继续玩"作弊
+        if (seat.quit) {
+          send(ws, { type: 'error', message: '你已主动退出本局，不能返回（本局结束后可重新加入）' });
+          return;
+        }
         // 该座位已有活跃连接（如同浏览器双开）：拒绝，避免顶掉正在玩的对局
         if (seat.ws && seat.ws.readyState === WebSocket.OPEN && seat.ws !== ws) {
           send(ws, { type: 'error', message: '该座位已有活跃连接，请勿重复打开' });
@@ -402,6 +408,12 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       }
       if (!room.state) {
         send(ws, { type: 'error', message: '该房间还没有开始对局，暂时无法观战' });
+        return;
+      }
+      // 对局参与者（含已退出/掉线）禁止观战本房间：防止"观战看牌后回到对局"作弊
+      const watchBlock = watchAllowed(room, msg.playerId);
+      if (watchBlock) {
+        send(ws, { type: 'error', message: watchBlock });
         return;
       }
       // 观战：不占座位，订阅房间全牌面对局广播

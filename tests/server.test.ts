@@ -20,6 +20,7 @@ import {
   exitGame,
   uncontrol,
   leaveRoom,
+  watchAllowed,
 } from '../server/rooms';
 
 function toState(s: unknown): GameState {
@@ -361,6 +362,61 @@ describe('退出对局与托管', () => {
     expect(room.aiControlled.has(0)).toBe(true);
     uncontrol(room, 0);
     expect(room.aiControlled.has(0)).toBe(false);
+  });
+
+  it('exitGame（主动退出）：座位标记 quit（本局不可 rejoin），与掉线区分', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    exitGame(room, 0);
+    expect(room.seats[0].quit).toBe(true); // 主动退出标记
+    expect(room.seats[0].left).toBe(true); // 座位保留（托管代打）
+    // 掉线（onDisconnect 路径）不设 quit：掉线玩家仍可 rejoin
+    const room2 = createRoom('EFGH', '小红');
+    room2.seats[0].ws = {} as never;
+    addBot(room2);
+    setReady(room2, 0, true);
+    startGame(room2);
+    // 模拟掉线：仅托管 + 断开连接，不调用 exitGame
+    room2.aiControlled.add(0);
+    room2.seats[0].ws = null;
+    room2.seats[0].left = true;
+    expect(room2.seats[0].quit).toBeUndefined();
+  });
+
+  it('restartGame：本局结束后释放主动退出者的座位为空位（可重新加入）', () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    exitGame(room, 0); // 房主主动退出
+    expect(room.seats[0].quit).toBe(true);
+    restartGame(room); // 本局结束再来一局
+    expect(room.seats[0].quit).toBeUndefined(); // quit 标记清除
+    expect(seatInfo(room)[0].taken).toBe(false); // 座位释放为空位
+  });
+
+  it('watchAllowed：对局参与者（含已退出）禁止观战本房间；路人放行', () => {
+    const room = createRoom('WATC', '小明');
+    room.seats[0].ws = {} as never;
+    const s1 = joinRoom(room, '小红');
+    expect(s1).toBe(1);
+    if (s1 !== null) room.seats[s1].ws = {} as never;
+    setReady(room, 0, true);
+    setReady(room, 1, true);
+    startGame(room);
+    // 对局中参与者（座位号 → pid ≥ 0）→ 拒绝
+    expect(watchAllowed(room, 0)).not.toBeNull();
+    expect(watchAllowed(room, 1)).not.toBeNull();
+    // 路人（无 playerId / 不属于本房间的座位号）→ 放行
+    expect(watchAllowed(room, undefined)).toBeNull();
+    expect(watchAllowed(room, 3)).toBeNull(); // 空位不是参与者
+    // 主动退出后仍禁止观战（退出者既不能看牌也不能回来）
+    exitGame(room, 0);
+    expect(watchAllowed(room, 0)).not.toBeNull();
   });
 
   it('leaveRoom：仅大厅状态清空座位（名字/准备/连接）；对局中拒绝', () => {

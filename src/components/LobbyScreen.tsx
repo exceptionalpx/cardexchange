@@ -188,11 +188,14 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
           break;
         case 'error':
           setError(msg.message);
-          // 死会话兜底：首页点击"回到对局"失败（房间不存在）→ 清除本地会话，隐藏入口并醒目提示
-          if (roomRef.current === null && msg.message.includes('房间不存在或座位无效')) {
+          // 死会话兜底：首页点击"回到对局"失败（房间不存在 / 已主动退出本局）→ 清除本地会话，隐藏入口并醒目提示
+          if (
+            roomRef.current === null &&
+            (msg.message.includes('房间不存在或座位无效') || msg.message.includes('已主动退出本局'))
+          ) {
             localStorage.removeItem(ONLINE_KEY);
             onSessionInvalid();
-            setError('之前的对局已结束（服务器重启后房间会清空），已清除记录');
+            setError('你已主动退出该对局（本局不可返回），已清除记录；本局结束后可重新加入');
           }
           break;
       }
@@ -407,6 +410,8 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
           <div className="room-list">
             {openRooms.map((r) => {
               const full = r.humanFilled >= r.humanTotal && !r.inGame;
+              // 我参与的房间：禁止观战（防"退出/掉线后观战看牌再回来"作弊）
+              const mine = saved?.code === r.code;
               return (
                 <button
                   key={r.code}
@@ -418,6 +423,10 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
                       return;
                     }
                     if (r.inGame) {
+                      if (mine) {
+                        setError('你正在参与本局，不能观战');
+                        return;
+                      }
                       onWatch(r.code);
                       return;
                     }
@@ -428,7 +437,7 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
                   <span>
                     真人 {r.humanFilled}/{r.humanTotal}
                   </span>
-                  <span className="badge">{r.inGame ? '👀 点击观战' : full ? '已满' : '可加入'}</span>
+                  <span className="badge">{r.inGame ? (mine ? '⛔ 参与中' : '👀 点击观战') : full ? '已满' : '可加入'}</span>
                   <span className="room-item-code">{r.code}</span>
                 </button>
               );
