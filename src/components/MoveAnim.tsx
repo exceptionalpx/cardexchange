@@ -74,6 +74,12 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
       endH: dRect ? dRect.height : 56,
     };
     if (lastMove.kind === 'replace') {
+      // 起点用牌堆中心（新牌来自牌堆）：飞行距离稳定、牌堆在中央可视区，
+      // 避免"座位行中心≈槽位"位移≈0 和座位滚出视口时动画在屏外播放（手机端时有时无/一闪而过）
+      const deckEl = document.querySelector('.deck-stub');
+      if (!(deckEl instanceof HTMLElement)) return;
+      const dkr = deckEl.getBoundingClientRect();
+      base.seat = { x: dkr.left + dkr.width / 2 - 20, y: dkr.top + dkr.height / 2 - 28, w: 40, h: 56 };
       const slotEl = document.querySelector(
         `[data-player="${lastMove.actor}"][data-slot="${lastMove.slot}"] .card`,
       );

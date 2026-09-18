@@ -12,6 +12,8 @@ interface Props {
   onDiscard?: (slot: number) => void;
   /** 是否处于托管状态（退出/掉线，由服务器 AI 代打） */
   aiControlled?: boolean;
+  /** 跟弃窗口信息（倒计时+放弃按钮，显示在手牌区弃牌按钮旁） */
+  followBar?: { left: number; gaveUp: boolean; onPass: () => void } | null;
 }
 
 export default function PlayerSeat({
@@ -23,6 +25,7 @@ export default function PlayerSeat({
   showDiscard,
   onDiscard,
   aiControlled,
+  followBar,
 }: Props) {
   return (
     <div
@@ -60,6 +63,14 @@ export default function PlayerSeat({
           </div>
         ))}
       </div>
+      {followBar && (
+        <div className="follow-bar seat-follow-bar">
+          <span className="follow-timer">可跟弃 · {followBar.left}s</span>
+          <button className="btn btn-small" onClick={followBar.onPass} disabled={followBar.gaveUp}>
+            {followBar.gaveUp ? '已放弃（等待其他玩家）' : '放弃'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1360,6 +1360,14 @@ body {
   font-weight: 800;
   font-size: 14px;
 }
+/* 跟弃条（玩家手牌区下方，与"弃"按钮同区）：宽度撑满座位、倒计时略紧凑 */
+.seat-follow-bar {
+  width: 100%;
+  margin: 6px 0 0;
+}
+.seat-follow-bar .follow-timer {
+  font-size: 13px;
+}
 /* 弃牌/罚牌动画：纯展示，不拦截点击（跟弃窗口 3 秒内按钮立即可点） */
 .anim-layer-passive {
   pointer-events: none;
@@ -1493,7 +1501,7 @@ body {
 .toasts {
   position: fixed;
   right: 12px;
-  bottom: 78px; /* 💬 聊天按钮（48px+12px）上方，不遮挡任何对局信息 */
+  bottom: 118px; /* 操作面板上方（78→118），不再遮挡摸牌/替换等操作按钮 */
   left: auto;
   top: auto;
   transform: none;
@@ -1502,6 +1510,8 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+  max-height: calc(100vh - 250px);
+  overflow: hidden;
   pointer-events: none;
 }
 .toast {

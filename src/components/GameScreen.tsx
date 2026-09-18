@@ -76,6 +76,38 @@ function bonusThresholds(playerCount: number): { n2: number; n1: number } {
 }
 
 /**
+ * 音效事件防重：换牌 / 弃牌替换 / 罚牌各事件按独立 seq 判定是否首次出现。
+ * 修复"组合键（三事件 seq 拼接）整体比对导致某事件变化时其他事件旧值被误判而重播音效"。
+ */
+export interface SfxEventState {
+  swap: number;
+  move: number;
+  penalty: number;
+}
+export function nextSfxEvents(
+  prev: SfxEventState,
+  s: Pick<GameState, 'lastSwap' | 'lastMove' | 'lastPenalty'>,
+): { playSwap: boolean; playMove: boolean; playPenalty: boolean; next: SfxEventState } {
+  const next: SfxEventState = { swap: prev.swap, move: prev.move, penalty: prev.penalty };
+  let playSwap = false;
+  let playMove = false;
+  let playPenalty = false;
+  if (s.lastSwap && s.lastSwap.seq !== prev.swap) {
+    next.swap = s.lastSwap.seq;
+    playSwap = true;
+  }
+  if (s.lastMove && s.lastMove.seq !== prev.move) {
+    next.move = s.lastMove.seq;
+    playMove = true;
+  }
+  if (s.lastPenalty && s.lastPenalty.seq !== prev.penalty) {
+    next.penalty = s.lastPenalty.seq;
+    playPenalty = true;
+  }
+  return { playSwap, playMove, playPenalty, next };
+}
+
+/**
  * 计算翻看/明换展示中需要强制正面的牌。
  * 信息隐藏：只有"真人"发动者（revealDone.viewer / confirmReveal 时 currentPlayer）能看到牌面；
  * 机器人发动的翻看/明换不向玩家亮牌，玩家只能通过行为推理。
@@ -252,23 +284,26 @@ export default function GameScreen({ config, online, onExit }: Props) {
 
   // ---- 音效：摸牌/盖牌/看牌/换牌/替换/弃牌/罚牌/定牌/跟弃成功（按动画事件 seq 与状态变化各触发一次） ----
   // 联机视图不含 animSeq，改用 lastSwap/lastMove/lastPenalty 各自的 seq 组合键防重（本地/联机通用）
-  const animKeyRef = useRef('');
+  const swapSeqRef = useRef(0);
+  const moveSeqRef = useRef(0);
+  const penaltySeqRef = useRef(0);
   const prevPendingKindRef = useRef<string | null>(null);
   const prevDeclaredRef = useRef<number | null>(null);
   const prevDealKeyRef = useRef<string | null>(null);
   const prevFollowSubRef = useRef<number | null>(null);
   useEffect(() => {
-    // 动画事件：与别人换牌 / 主动弃牌 / 替换手牌 / 跟弃失败罚牌（seq 递增防重）
-    const animKey = `${state.lastSwap?.seq ?? 0}|${state.lastMove?.seq ?? 0}|${state.lastPenalty?.seq ?? 0}`;
-    if (animKey !== animKeyRef.current) {
-      animKeyRef.current = animKey;
-      if (state.lastSwap) {
-        playSfx('swap_other'); // 与别人换牌（J/Q/K）
-      } else if (state.lastMove) {
-        playSfx(state.lastMove.kind === 'discard' ? 'discard' : 'swap_self');
-      }
-      if (state.lastPenalty) playSfx('follow_fail'); // 跟弃失败罚牌
-    }
+    // 动画事件：与别人换牌 / 主动弃牌 / 替换手牌 / 跟弃失败罚牌（各事件独立 seq 防重，
+    // 避免某事件 seq 变化时整组重跑，导致其他事件旧值被误判而重播音效）
+    const ev = nextSfxEvents(
+      { swap: swapSeqRef.current, move: moveSeqRef.current, penalty: penaltySeqRef.current },
+      state,
+    );
+    swapSeqRef.current = ev.next.swap;
+    moveSeqRef.current = ev.next.move;
+    penaltySeqRef.current = ev.next.penalty;
+    if (ev.playSwap) playSfx('swap_other'); // 与别人换牌（J/Q/K）
+    if (ev.playMove) playSfx(state.lastMove!.kind === 'discard' ? 'discard' : 'swap_self');
+    if (ev.playPenalty) playSfx('follow_fail'); // 跟弃失败罚牌
     // 摸牌 / 看牌
     const pk = state.pending?.kind ?? null;
     if (pk !== prevPendingKindRef.current) {
@@ -563,14 +598,7 @@ export default function GameScreen({ config, online, onExit }: Props) {
       </div>
       <div className="game-main">
         <div className="table">
-          {state.phase === 'follow' && state.follow && (
-            <div className="follow-bar">
-              <span className="follow-timer">可跟弃 · {followLeft}s</span>
-              <button className="btn btn-small" onClick={passFollowAll} disabled={isOnline && gaveUp}>
-                {isOnline && gaveUp ? '已放弃（等待其他玩家）' : '放弃'}
-              </button>
-            </div>
-          )}
+          {/* 跟弃倒计时+放弃按钮：已移到玩家手牌区（弃牌按钮旁），不再压定牌奖励横条 */}
           {/* 定牌奖励横条：牌堆上方居中，不占左侧竖空间 */}
           {declareBonusOn && (() => {
             const { n2, n1 } = bonusThresholds(state.players.length);
@@ -639,6 +667,15 @@ export default function GameScreen({ config, online, onExit }: Props) {
                   showDiscard={showDiscard}
                   onDiscard={(slot) => dispatch({ type: 'TRY_FOLLOW', playerId: vp.id, slot })}
                   aiControlled={aiControlled.has(vp.id)}
+                  followBar={
+                    state.phase === 'follow' && state.follow && showDiscard
+                      ? {
+                          left: followLeft,
+                          gaveUp: isOnline && gaveUp,
+                          onPass: passFollowAll,
+                        }
+                      : undefined
+                  }
                 />
               );
             })}

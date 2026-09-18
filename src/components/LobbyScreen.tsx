@@ -72,6 +72,12 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   const [joinCode, setJoinCode] = useState('');
   const [room, setRoom] = useState<RoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 连接状态（net.state 镜像：未连接/重连时关键操作给明确提示，不再静默无反应） */
+  const [netState, setNetState] = useState<'open' | 'connecting' | 'closed'>(() => net.state);
+  /** 创建/加入请求中（按钮 loading 防重复提交） */
+  const [sending, setSending] = useState(false);
+  /** 弹窗内错误（不被遮罩遮挡，替代首页顶部横幅） */
+  const [modalError, setModalError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [openRooms, setOpenRooms] = useState<OpenRoom[]>([]);
   /** 创建/加入弹窗（null=收起） */
@@ -101,6 +107,9 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   useEffect(() => {
     applyTheme(loadTheme());
   }, []);
+
+  // 订阅连接状态变化（断线/重连时首页提示，不再静默丢消息）
+  useEffect(() => net.onStateChange(() => setNetState(net.state)), [net]);
 
   function changeAvatar(v: string) {
     setAvatar(v);
@@ -149,6 +158,9 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
             inGame: false,
           });
           setError(null);
+          setOpenPanel(null);
+          setModalError(null);
+          setSending(false);
           localStorage.setItem('cardexchange-name', nameRef.current);
           localStorage.setItem('cardexchange-name-auto', nameAutoRef.current ? '1' : '0');
           localStorage.setItem(
@@ -352,6 +364,13 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
         创建房间后可添加机器人或等待朋友加入
       </p>
 
+      {/* 连接状态：未连接/重连中给明确提示 */}
+      {netState !== 'open' && (
+        <p className="hint hint-warn">
+          ⚠ {netState === 'connecting' ? '服务器连接中…' : '连接已断开，正在重连…'}
+        </p>
+      )}
+
       {/* 会话/操作错误：醒目横幅（首页顶部，替代底部小字） */}
       {error && <div className="home-error-banner">⚠ {error}</div>}
 
@@ -454,11 +473,20 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
       <div className="lobby-entry">
         <button
           className="btn btn-big btn-primary"
-          onClick={() => setOpenPanel('create')}
+          onClick={() => {
+            setModalError(null);
+            setOpenPanel('create');
+          }}
         >
           ＋ 创建房间
         </button>
-        <button className="btn btn-big" onClick={() => setOpenPanel('join')}>
+        <button
+          className="btn btn-big"
+          onClick={() => {
+            setModalError(null);
+            setOpenPanel('join');
+          }}
+        >
           🚪 加入房间
         </button>
       </div>
@@ -475,16 +503,24 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
             </div>
             <button
               className="btn btn-big btn-primary"
+              disabled={sending}
               onClick={() => {
                 if (!name.trim()) {
-                  setError('请先输入昵称');
+                  setModalError('请先输入昵称');
                   return;
                 }
+                if (net.state !== 'open') {
+                  setModalError('服务器连接中，请稍候…');
+                  return;
+                }
+                setSending(true);
+                setModalError(null);
                 net.send({ type: 'createRoom', name, avatar, config: { followWindowMs: createFollowMs, declareBonus: createBonus, allowSelfFollow: createSelfFollow, botMemory: createBotMemory } });
               }}
             >
-              创建房间
+              {sending ? '创建中…' : '创建房间'}
             </button>
+            {modalError && <p className="hint hint-error">{modalError}</p>}
             <p className="hint">创建后可在房间内添加机器人（1~3 个）或等待玩家加入，最多 4 人</p>
             <div className="settings-title">⚙ 房间设置</div>
             <div className="settings-grid">
@@ -545,20 +581,28 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
             />
             <button
               className="btn btn-big"
+              disabled={sending}
               onClick={() => {
                 if (!name.trim()) {
-                  setError('请先输入昵称');
+                  setModalError('请先输入昵称');
                   return;
                 }
                 if (joinCode.trim().length !== 4) {
-                  setError('请输入 4 位房间码');
+                  setModalError('请输入 4 位房间码');
                   return;
                 }
+                if (net.state !== 'open') {
+                  setModalError('服务器连接中，请稍候…');
+                  return;
+                }
+                setSending(true);
+                setModalError(null);
                 net.send({ type: 'joinRoom', code: joinCode, name, avatar });
               }}
             >
-              加入房间
+              {sending ? '加入中…' : '加入房间'}
             </button>
+            {modalError && <p className="hint hint-error">{modalError}</p>}
           </div>
         </div>
       )}
