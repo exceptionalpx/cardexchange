@@ -472,7 +472,6 @@ export default function GameScreen({ config, online, onExit }: Props) {
           {state.declaredPlayer !== null && (
             <span className="badge badge-declared">{state.players[state.declaredPlayer].name} 已定牌</span>
           )}
-          <span className="badge badge-deck">牌堆剩余 {deckCount} 张</span>
         </div>
         <div className="header-tools">
           <button
@@ -572,6 +571,15 @@ export default function GameScreen({ config, online, onExit }: Props) {
               </button>
             </div>
           )}
+          {/* 定牌奖励横条：牌堆上方居中，不占左侧竖空间 */}
+          {declareBonusOn && (() => {
+            const { n2, n1 } = bonusThresholds(state.players.length);
+            return (
+              <div className="declare-bonus-hint">
+                定牌奖励：牌堆剩余 ≥{n2} 张 −2 分 · ≥{n1} 张 −1 分
+              </div>
+            );
+          })()}
           <div className="center-area">
             {config?.guided && state.phase === 'deal' && (
               <div className="guided-card">
@@ -587,14 +595,6 @@ export default function GameScreen({ config, online, onExit }: Props) {
               const humanId = state.players.findIndex((p) => !p.isBot);
               if (state.currentPlayer !== humanId) return null;
               return <div className="guided-tip">💡 轮到你：可摸牌；也可宣布<b>定牌</b>（之后其他人各操作一轮，亮牌总分最小者胜）</div>;
-            })()}
-            {declareBonusOn && (() => {
-              const { n2, n1 } = bonusThresholds(state.players.length);
-              return (
-                <div className="declare-bonus-hint">
-                  定牌奖励：牌堆剩余 ≥{n2} 张 −2 分 · ≥{n1} 张 −1 分
-                </div>
-              );
             })()}
             <div className="deck-stub">
               <div className="deck-stack" aria-hidden>

@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '../src/core/types';
 import { applyAction, createGame } from '../src/core/engine';
+import { aiDecide } from '../src/core/ai';
 import { buildClientView, buildWatchView, sanitizePending } from '../server/sanitize';
 import {
   addBot,
@@ -18,6 +19,7 @@ import {
   startGame,
   handleAction,
   exitGame,
+  takeover,
   uncontrol,
   leaveRoom,
   watchAllowed,
@@ -362,6 +364,37 @@ describe('退出对局与托管', () => {
     expect(room.aiControlled.has(0)).toBe(true);
     uncontrol(room, 0);
     expect(room.aiControlled.has(0)).toBe(false);
+  });
+
+  it('takeover：轮到真人等待操作时退出，AI 立即接手不卡局（定时器调度）', async () => {
+    const room = createRoom('ABCD', '小明');
+    room.seats[0].ws = {} as never;
+    addBot(room);
+    setReady(room, 0, true);
+    startGame(room);
+    const human = room.pidBySeat![0];
+    // 真人确认盖牌进入 playing
+    handleAction(room, human, { type: 'CONFIRM_DEAL' });
+    expect(room.state?.phase).toBe('playing');
+    // 手动推进到真人回合（若轮到机器人则让其出招）
+    let guard = 0;
+    let st = room.state!;
+    while (st.players[st.currentPlayer].isBot && guard < 30) {
+      st = applyAction(st, aiDecide(st, st.currentPlayer));
+      guard++;
+    }
+    // 真人摸牌，进入"等待真人选择"（drawn）——此时正是会卡住的场景
+    st = applyAction(st, { type: 'DRAW' });
+    room.state = st;
+    expect(room.state.currentPlayer).toBe(human);
+    expect(room.state.pending?.kind).toBe('drawn');
+    // 真人退出 → 托管接管 → 立即调度 AI 出招
+    exitGame(room, 0);
+    takeover(room, human);
+    await new Promise((r) => setTimeout(r, 1300)); // AI 700ms + 余量
+    const after = room.state!;
+    const stillStuck = after.pending?.kind === 'drawn' && after.currentPlayer === human;
+    expect(stillStuck).toBe(false); // 不再卡在等待真人：AI 已接手推进
   });
 
   it('exitGame（主动退出）：座位标记 quit（本局不可 rejoin），与掉线区分', () => {

@@ -142,6 +142,20 @@ export function uncontrol(room: Room, pid: number): void {
   room.aiControlled.delete(pid);
 }
 
+/** 托管接管：退出/掉线后由服务器 AI 代打（立即调度，不卡局）。
+ *  发牌阶段自动确认盖牌；普通阶段若正轮到该玩家则马上让 AI 出招。 */
+export function takeover(room: Room, pid: number): void {
+  room.aiControlled.add(pid);
+  // 发牌阶段：自动确认盖牌（否则发牌阶段卡在等待；handleAction 内部已触发 schedule + broadcast）
+  if (room.state?.phase === 'deal' && !room.state.dealConfirmed[pid] && !room.state.players[pid].isBot) {
+    handleAction(room, pid, { type: 'CONFIRM_DEAL', playerId: pid });
+    return;
+  }
+  // 普通阶段：重新调度——若当前正轮到该玩家（或处于其 pending 选择中），立即让 AI 接手
+  schedule(room);
+  broadcastView(room);
+}
+
 /** 主动托管开关：玩家在线时让 AI 代打（on=false 恢复手动）。开启时立即重新调度，
  *  若正轮到该玩家则按 AI 逻辑自动推进，避免停在等待真人操作。 */
 export function setAutopilot(room: Room, pid: number, on: boolean): void {

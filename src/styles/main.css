@@ -1305,13 +1305,42 @@ body {
     display: none;
   }
 }
-/* ---- 方案A补充：移动端顶部栏不换行，隐藏次要"牌堆剩余"徽章 ---- */
+/* ---- 移动端顶部栏：不换行 + 压缩字号，标题与状态徽章保持一行 ---- */
 @media (max-width: 760px) {
   .game-header {
     flex-wrap: nowrap;
+    padding: 8px 10px;
+    gap: 4px;
   }
-  .badge-deck {
-    display: none;
+  .game-title {
+    font-size: 17px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .game-status {
+    flex-wrap: nowrap;
+    gap: 4px;
+    min-width: 0;
+  }
+  .game-status .badge {
+    margin-left: 0;
+    padding: 2px 7px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .badge-declared {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .header-tools {
+    gap: 4px;
+  }
+  .game-header .btn-small {
+    padding: 4px 8px;
+    font-size: 12px;
+    white-space: nowrap;
   }
 }
 /* ---- 跟弃窗口提示条：倒计时 + 放弃按钮 ---- */
@@ -1578,17 +1607,20 @@ body {
   background: rgba(184, 216, 255, 0.65);
 }
 
-/* ===== 牌堆上方定牌奖励门槛提示 ===== */
+/* ===== 牌堆上方定牌奖励门槛提示（全宽横条，不占左侧竖空间） ===== */
 .declare-bonus-hint {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto 10px;
   font-size: 12px;
   color: var(--gold-deep);
   background: rgba(255, 224, 130, 0.4);
   border: 1.5px solid rgba(201, 162, 39, 0.6);
   border-radius: 999px;
   padding: 4px 12px;
-  margin-bottom: 8px;
   text-align: center;
   font-weight: 700;
+  line-height: 1.4;
 }
 
 /* ===== 引导局教学卡（开局） ===== */

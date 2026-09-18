@@ -26,6 +26,7 @@ import {
   setAutopilot,
   setReady,
   startGame,
+  takeover,
   uncontrol,
   watchAllowed,
 } from './rooms';
@@ -144,17 +145,11 @@ function onDisconnect(ws: WebSocket): void {
   const seat = room.seats[meta.seatId];
   // 只清掉仍属于自己的连接（同座位重连后，旧连接断开不影响新连接）
   if (seat && seat.ws === ws) seat.ws = null;
-  // 对局中掉线：座位保留等待重连，回合交给服务器托管（AI 代打，不卡局）
+  // 对局中掉线：座位保留等待重连，回合交给服务器托管（AI 代打，立即调度不卡局）
   if (room.state && seat) {
     const pid = room.pidBySeat?.[seat.id] ?? -1;
     if (pid >= 0 && !seat.isBot) {
-      room.aiControlled.add(pid);
-      // 发牌阶段掉线：自动确认盖牌（否则发牌阶段会卡住）
-      if (room.state.phase === 'deal' && !room.state.dealConfirmed[pid]) {
-        handleAction(room, pid, { type: 'CONFIRM_DEAL', playerId: pid });
-      } else {
-        broadcastView(room);
-      }
+      takeover(room, pid);
       // 对局中真人全掉线：延时关房（60 秒重连窗口）
       maybeCloseEmpty(room);
     }
@@ -357,11 +352,9 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
       if (!room) return;
       if (!room.state) return; // 仅对局中可退出对局
       if (!exitGame(room, meta.seatId)) return;
-      // 发牌阶段退出：自动确认盖牌（否则发牌阶段会卡住）
+      // 托管接管：发牌阶段自动盖牌；普通阶段若正轮到该玩家立即让 AI 出招（不卡局）
       const epid = room.pidBySeat?.[meta.seatId] ?? -1;
-      if (room.state.phase === 'deal' && epid >= 0 && !room.state.dealConfirmed[epid]) {
-        handleAction(room, epid, { type: 'CONFIRM_DEAL', playerId: epid });
-      }
+      if (epid >= 0) takeover(room, epid);
       // 退出者：回房间等待页（含房间数据，房间页显示"对局进行中"+回到对局入口）
       send(ws, {
         type: 'exitGame',
@@ -374,8 +367,6 @@ function dispatch(ws: WebSocket, msg: ClientMessage): void {
         gamesPlayed: room.gamesPlayed,
         inGame: true,
       });
-      // 其他玩家：刷新视图（看到托管标志）
-      broadcastView(room);
       // 对局中真人全退出：延时关房（60 秒重连窗口）
       maybeCloseEmpty(room);
       return;

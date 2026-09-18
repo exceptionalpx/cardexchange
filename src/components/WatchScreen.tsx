@@ -156,17 +156,17 @@ export default function WatchScreen({ code, onExit }: Props) {
 
       {view && (
         <div className="table">
+          {declareBonusOn && (() => {
+            const initDeck = 54 - 4 * view.players.length;
+            const n2 = Math.ceil(initDeck * 0.6);
+            const n1 = Math.ceil(initDeck * 0.35);
+            return (
+              <div className="declare-bonus-hint">
+                定牌奖励：牌堆剩余 ≥{n2} 张 −2 分 · ≥{n1} 张 −1 分
+              </div>
+            );
+          })()}
           <div className="center-area">
-            {declareBonusOn && (() => {
-              const initDeck = 54 - 4 * view.players.length;
-              const n2 = Math.ceil(initDeck * 0.6);
-              const n1 = Math.ceil(initDeck * 0.35);
-              return (
-                <div className="declare-bonus-hint">
-                  定牌奖励：牌堆剩余 ≥{n2} 张 −2 分 · ≥{n1} 张 −1 分
-                </div>
-              );
-            })()}
             <div className="deck-stub">
               <div className="deck-stack" aria-hidden>
                 <div className="deck-card deck-card-1" />
