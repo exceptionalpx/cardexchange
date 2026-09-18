@@ -346,7 +346,11 @@ export default function LobbyScreen({ net, onEnterGame, onGuided, saved, initial
   return (
     <div className="menu lobby">
       <h1 className="menu-title">♠ 换牌王 ♥</h1>
-      <p className="menu-sub">公网联机 · 创建房间后可添加机器人或等待朋友加入</p>
+      <p className="menu-sub">
+        公网联机
+        <br />
+        创建房间后可添加机器人或等待朋友加入
+      </p>
 
       {/* 会话/操作错误：醒目横幅（首页顶部，替代底部小字） */}
       {error && <div className="home-error-banner">⚠ {error}</div>}

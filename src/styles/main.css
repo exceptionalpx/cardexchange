@@ -196,6 +196,8 @@ body {
   padding: 4px 16px;
   border-radius: 999px;
   border: 1px solid var(--line);
+  line-height: 1.5;
+  text-align: center;
 }
 
 .menu-section {
@@ -782,19 +784,21 @@ body {
   display: flex;
   gap: 4px;
   min-height: var(--card-h);
+  align-items: center; /* 空状态小占位垂直居中，高度始终对齐卡牌行 */
 }
 
 .pile-empty {
-  width: 90px;
-  height: 120px;
-  border: 2px dashed rgba(30, 94, 63, 0.4);
-  border-radius: 12px;
-  background: rgba(255, 253, 246, 0.28);
+  width: 46px;
+  height: 64px;
+  border: 2px dashed rgba(30, 94, 63, 0.32);
+  border-radius: 10px;
+  background: rgba(255, 253, 246, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-soft);
-  opacity: 0.75;
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 /* ---------- 座位 ---------- */
@@ -1488,13 +1492,15 @@ body {
 
 .toasts {
   position: fixed;
-  top: 64px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 12px;
+  bottom: 78px; /* 💬 聊天按钮（48px+12px）上方，不遮挡任何对局信息 */
+  left: auto;
+  top: auto;
+  transform: none;
   z-index: 50;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
   pointer-events: none;
 }
