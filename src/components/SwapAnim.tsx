@@ -120,6 +120,9 @@ export default function SwapAnim({
     const cleanup = () => {
       if (cleaned) return;
       cleaned = true;
+      // 先隐藏飞行层，再恢复空槽，最后卸载动画层（避免"飞行卡叠真牌"的一帧残留）
+      if (pawRef.current) pawRef.current.style.opacity = '0';
+      if (otherRef.current) otherRef.current.style.opacity = '0';
       restoreSlots();
       setPlan(null);
     };

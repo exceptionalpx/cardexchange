@@ -23,6 +23,9 @@ interface Plan {
   discard: Rect;
   /** replace：目标槽位；penalty：被罚槽位 */
   slot?: Rect;
+  /** 终点目标元素的真实尺寸（落定时飞行卡放大到该尺寸，避免"小牌叠大牌"残留帧） */
+  endW?: number;
+  endH?: number;
   /** 飞行卡真实牌面（弃的牌 / 被替换旧牌，均公开进弃牌堆）；penalty 无牌面用背面 */
   card?: Card;
   /** penalty：被罚玩家与槽位（落位后高亮用） */
@@ -59,11 +62,16 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
     const discardEl = document.querySelector('.discard-pile .pile-cards');
     if (!(discardEl instanceof HTMLElement)) return;
     const dr = discardEl.getBoundingClientRect();
+    // 终点目标元素真实尺寸：弃牌堆/槽位里的真牌，落定时飞行卡放大到该尺寸无缝融入
+    const dCard = discardEl.querySelector('.card');
+    const dRect = dCard instanceof HTMLElement ? dCard.getBoundingClientRect() : null;
     const base: Plan = {
       kind: lastMove.kind,
       seat: { x: sr.left + sr.width / 2 - 20, y: sr.top + sr.height / 2 - 28, w: 40, h: 56 },
       discard: { x: dr.left + dr.width / 2 - 20, y: dr.top + dr.height / 2 - 28, w: 40, h: 56 },
       card: lastMove.kind === 'discard' ? lastMove.card : lastMove.replaced,
+      endW: dRect ? dRect.width : 40,
+      endH: dRect ? dRect.height : 56,
     };
     if (lastMove.kind === 'replace') {
       const slotEl = document.querySelector(
@@ -72,6 +80,9 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
       if (!(slotEl instanceof HTMLElement)) return;
       const sl = slotEl.getBoundingClientRect();
       base.slot = { x: sl.left, y: sl.top, w: sl.width, h: sl.height };
+      // replace：猫爪送新牌终点放大到槽位真牌尺寸；旧牌从槽位飞向弃牌堆，终点放大到弃牌堆真牌尺寸
+      base.endW = sl.width;
+      base.endH = sl.height;
       // 空槽：动画期间被替换槽位隐藏（旧牌被拿走、新牌未落定），动画结束恢复显示新牌
       base.hideEl = slotEl;
       base.hideEl.classList.add('slot-hide');
@@ -102,6 +113,8 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
       seat: { x: dr.left + dr.width / 2 - 20, y: dr.top + dr.height / 2 - 28, w: 40, h: 56 },
       discard: { x: sl.left, y: sl.top, w: sl.width, h: sl.height },
       slot: { x: sl.left, y: sl.top, w: sl.width, h: sl.height },
+      endW: sl.width,
+      endH: sl.height,
       targetPlayer: lastPenalty.actor,
       targetSlot: lastPenalty.slot,
     });
@@ -117,12 +130,15 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
       if (!fly) return;
       const dx = plan.discard.x - plan.seat.x;
       const dy = plan.discard.y - plan.seat.y;
+      // 终点放大到弃牌堆真牌尺寸（endW/endH），落定时与堆内真牌完全同尺寸叠合
+      const sx = plan.endW! / plan.seat.w;
+      const sy = plan.endH! / plan.seat.h;
       anims.push(
         fly.animate(
           [
             { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
             { transform: `translate(${dx / 2}px, ${dy / 2 - 70}px) scale(1.04)`, offset: 0.5, opacity: 1 },
-            { transform: `translate(${dx}px, ${dy}px) scale(0.72)`, offset: 1, opacity: 0.9 },
+            { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, offset: 1, opacity: 1 },
           ],
           { duration: 850, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
         ),
@@ -132,12 +148,14 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
       if (!fly) return;
       const dx = plan.discard.x - plan.seat.x;
       const dy = plan.discard.y - plan.seat.y;
+      const sx = plan.endW! / plan.seat.w;
+      const sy = plan.endH! / plan.seat.h;
       anims.push(
         fly.animate(
           [
             { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
             { transform: `translate(${dx / 2}px, ${dy / 2 - 60}px) scale(1.05)`, offset: 0.5, opacity: 1 },
-            { transform: `translate(${dx}px, ${dy}px) scale(0.95)`, offset: 1, opacity: 1 },
+            { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, offset: 1, opacity: 1 },
           ],
           { duration: 800, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
         ),
@@ -159,25 +177,29 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
       if (!paw || !oldCard || !plan.slot) return;
       const dx = plan.slot.x - plan.seat.x;
       const dy = plan.slot.y - plan.seat.y;
+      const pawSx = plan.endW! / plan.seat.w;
+      const pawSy = plan.endH! / plan.seat.h;
       anims.push(
         paw.animate(
           [
             { transform: 'translate(0px, 0px) scale(1)' },
             { transform: `translate(${dx / 2}px, ${dy / 2 - 70}px) scale(1.05)`, offset: 0.5 },
-            { transform: `translate(${dx}px, ${dy}px) scale(1.1)`, offset: 0.92 },
-            { transform: `translate(${dx}px, ${dy}px) scale(1)`, offset: 1 },
+            { transform: `translate(${dx}px, ${dy}px) scale(1.15)`, offset: 0.92 },
+            { transform: `translate(${dx}px, ${dy}px) scale(${pawSx}, ${pawSy})`, offset: 1 },
           ],
           { duration: 750, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
         ),
       );
       const odx = plan.discard.x - plan.slot.x;
       const ody = plan.discard.y - plan.slot.y;
+      const oldSx = (plan.endW ?? plan.slot.w) / plan.slot.w;
+      const oldSy = (plan.endH ?? plan.slot.h) / plan.slot.h;
       anims.push(
         oldCard.animate(
           [
             { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
             { transform: `translate(${odx / 2}px, ${ody / 2 - 60}px) scale(1.04)`, offset: 0.5, opacity: 1 },
-            { transform: `translate(${odx}px, ${ody}px) scale(0.72)`, offset: 1, opacity: 0.9 },
+            { transform: `translate(${odx}px, ${ody}px) scale(${oldSx}, ${oldSy})`, offset: 1, opacity: 0.95 },
           ],
           { duration: 700, delay: 450, fill: 'forwards', easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)' },
         ),
@@ -189,6 +211,13 @@ export default function MoveAnim({ lastMove, lastPenalty, players }: Props) {
     const cleanup = () => {
       if (cleaned) return;
       cleaned = true;
+      // 先隐藏飞行层（避免"小卡叠大牌"的一帧），再恢复槽位牌，最后卸载动画层
+      if (plan.kind === 'discard' || plan.kind === 'penalty') {
+        if (flyRef.current) flyRef.current.style.opacity = '0';
+      } else {
+        if (pawRef.current) pawRef.current.style.opacity = '0';
+        if (oldRef.current) oldRef.current.style.opacity = '0';
+      }
       plan.hideEl?.classList.remove('slot-hide');
       setPlan(null);
     };

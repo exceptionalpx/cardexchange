@@ -1942,6 +1942,27 @@ body {
   color: #5e3a0f;
 }
 
+/* 经典风：消息 toast / 消息输入框 / 定牌奖励横条 / 设置数值也做深色适配（浅底+近白字看不清） */
+[data-theme='classic'] .toast {
+  background: rgba(8, 50, 32, 0.92);
+  color: var(--text);
+  border-color: rgba(240, 248, 241, 0.35);
+}
+[data-theme='classic'] .emoji-custom input {
+  background: rgba(8, 50, 32, 0.85);
+  color: var(--text);
+  border-color: rgba(240, 248, 241, 0.3);
+}
+[data-theme='classic'] .emoji-custom input::placeholder {
+  color: rgba(240, 248, 241, 0.5);
+}
+[data-theme='classic'] .declare-bonus-hint {
+  color: #5b3d00; /* 金黄底配深棕字，两风格均可读 */
+}
+[data-theme='classic'] .settings-val {
+  color: var(--text-soft);
+}
+
 /* 页面风格设置弹窗：两个风格选项竖排 */
 .theme-pick {
   display: flex;
