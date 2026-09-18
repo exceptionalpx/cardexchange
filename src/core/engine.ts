@@ -15,6 +15,7 @@ import type {
   GameConfig,
   GameState,
   LogEntry,
+  LogKind,
   PlayerState,
 } from './types';
 import { buildDeck, drawCard, shuffle } from './deck';
@@ -28,8 +29,8 @@ function nextPlayer(state: GameState, from: number): number {
   return (from + 1) % state.players.length;
 }
 
-function log(_state: GameState, playerId: number, text: string): LogEntry {
-  return { playerId, text };
+function log(_state: GameState, playerId: number, text: string, kind: LogKind = 'info'): LogEntry {
+  return { playerId, text, kind };
 }
 
 function removeKnowledge(p: PlayerState, cardId: string): PlayerState {
@@ -298,7 +299,7 @@ function confirmDeal(state: GameState, playerId?: number): GameState {
       players,
       dealConfirmed: confirmed,
       currentPlayer: next >= 0 ? next : state.currentPlayer,
-      log: [...state.log, log(state, pid, `${playerName(state, pid)} 看过并盖好手牌`)],
+      log: [...state.log, log(state, pid, `${playerName(state, pid)} 看过并盖好手牌`, 'deal')],
     };
   }
   // 全部真人确认完毕，进入 playing，从玩家 0 开始
@@ -308,7 +309,7 @@ function confirmDeal(state: GameState, playerId?: number): GameState {
     dealConfirmed: confirmed,
     currentPlayer: 0,
     phase: 'playing',
-    log: [...state.log, log(state, pid, `${playerName(state, pid)} 看过并盖好手牌`)],
+    log: [...state.log, log(state, pid, `${playerName(state, pid)} 看过并盖好手牌`, 'deal')],
   };
 }
 
@@ -326,7 +327,7 @@ function declare(state: GameState): GameState {
     currentPlayer: nextPlayer(state, dp),
     finalRemaining: others,
     pending: null,
-    log: [...state.log, log(state, dp, `${playerName(state, dp)} 宣布定牌！`)],
+    log: [...state.log, log(state, dp, `${playerName(state, dp)} 宣布定牌！`, 'declare')],
   };
 }
 
@@ -342,7 +343,7 @@ function draw(state: GameState): GameState {
     ...state,
     deck: rest,
     pending: { kind: 'drawn', card },
-    log: [...state.log, log(state, state.currentPlayer, `${playerName(state, state.currentPlayer)} 摸了一张牌`)],
+    log: [...state.log, log(state, state.currentPlayer, `${playerName(state, state.currentPlayer)} 摸了一张牌`, 'draw')],
   };
 }
 
@@ -458,7 +459,7 @@ function pickSelfSlot(state: GameState, slot: number): GameState {
     // 看自己牌也记录目标槽位：UI 播放拿起-晃动-放下（牌面仅对自己展示）
     animSeq: state.animSeq + 1,
     lastViewed: { actor: me.id, targetPlayer: me.id, targetSlot: slot, seq: state.animSeq + 1 },
-    log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的一张牌`)],
+    log: [...state.log, log(state, me.id, `${playerName(state, me.id)} 查看了自己的一张牌`, 'peek')],
   };
 }
 
@@ -494,7 +495,7 @@ function pickOther(state: GameState, playerId: number, slot: number): GameState 
     lastViewed: { actor: me.id, targetPlayer: playerId, targetSlot: slot, seq: state.animSeq + 1 },
     log: [
       ...state.log,
-      log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的一张牌`),
+      log(state, me.id, `${playerName(state, me.id)} 查看了 ${playerName(state, playerId)} 的一张牌`, 'peek'),
     ],
   };
 }
@@ -538,6 +539,7 @@ function maybeExecuteSwap(state: GameState): GameState {
           state,
           me.id,
           `${playerName(state, me.id)} 使用 K 明换，查看了 ${playerName(state, pend.otherPlayer)} 的一张牌`,
+          'peek',
         ),
       ],
     };
@@ -609,7 +611,7 @@ function confirmSwap(state: GameState, doSwap: boolean): GameState {
 
 /** 完成一次功能牌动作：清 pending 并结束回合 */
 function finishAbility(state: GameState, message: string): GameState {
-  const withPending = { ...state, pending: null, log: [...state.log, log(state, state.currentPlayer, message)] };
+  const withPending = { ...state, pending: null, log: [...state.log, log(state, state.currentPlayer, message, 'swap')] };
   return endTurn(withPending);
 }
 
@@ -629,7 +631,7 @@ function afterDiscard(state: GameState, discarded: Card): GameState {
     ...state,
     phase: 'follow',
     follow,
-    log: [...state.log, log(state, discarder, `${playerName(state, discarder)} 弃掉了 ${cardLabel(discarded)}`)],
+    log: [...state.log, log(state, discarder, `${playerName(state, discarder)} 弃掉了 ${cardLabel(discarded)}`, 'discard')],
   };
 }
 
@@ -660,7 +662,7 @@ function tryFollow(state: GameState, playerId: number, slot: number): GameState 
       follow: follow
         ? { ...follow, decisions: { ...follow.decisions, [playerId]: 'follow' }, submitted: [...follow.submitted, playerId] }
         : null,
-      log: [...state.log, log(state, playerId, `${playerName(state, playerId)} 跟弃成功，弃掉 ${cardLabel(card)}`)],
+      log: [...state.log, log(state, playerId, `${playerName(state, playerId)} 跟弃成功，弃掉 ${cardLabel(card)}`, 'follow')],
     };
     return closeFollowIfDone(nextState);
   }
@@ -689,6 +691,7 @@ function tryFollow(state: GameState, playerId: number, slot: number): GameState 
         res.got
           ? `${playerName(state, playerId)} 跟弃失败，被罚补一张牌`
           : `${playerName(state, playerId)} 跟弃失败，但牌堆已空无法补牌`,
+        'follow_fail',
       ),
     ],
   };
@@ -721,7 +724,7 @@ function passFollow(state: GameState, playerId: number): GameState {
   let nextState: GameState = {
     ...state,
     follow: { ...follow, decisions },
-    log: [...state.log, log(state, playerId, `${playerName(state, playerId)} 放弃跟弃`)],
+    log: [...state.log, log(state, playerId, `${playerName(state, playerId)} 放弃跟弃`, 'pass')],
   };
   if (isFollowClosed(nextState)) {
     nextState = { ...nextState, phase: resumePhase(state), follow: null };

@@ -80,9 +80,23 @@ export type PendingAction =
     } // K 明换：双方牌已展示，决定换/不换
   | { kind: 'revealDone'; card: Card; viewer: number }; // 7/8、9/10 翻看：牌面已展示，等待确认收起（限时）；viewer 为查看者（机器人查看不向玩家亮牌）
 
+/** 日志条目类型：记录面板按类型着色（玩家色 + 操作色） */
+export type LogKind =
+  | 'deal' // 看牌盖牌
+  | 'declare' // 宣布定牌
+  | 'draw' // 摸牌
+  | 'peek' // 查看（7/8 看自己、9/10 看别人、K 明换查看）
+  | 'discard' // 弃牌
+  | 'follow' // 跟弃成功
+  | 'follow_fail' // 跟弃失败罚牌
+  | 'pass' // 放弃跟弃
+  | 'swap' // 换牌（暗换/明换/替换）
+  | 'info'; // 系统/其他
+
 export interface LogEntry {
   playerId: number;
   text: string;
+  kind?: LogKind;
 }
 
 export interface GameState {

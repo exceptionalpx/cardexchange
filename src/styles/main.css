@@ -396,7 +396,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 20;
+  z-index: 9999; /* 最高：规则/记录/设置弹窗浮在所有对局浮层（动画/toast/操作面板）之上 */
 }
 
 .modal-card {
@@ -1131,7 +1131,7 @@ body {
   font-size: 11.5px;
   line-height: 1.55;
   color: var(--text);
-  z-index: 5;
+  z-index: 9990; /* 点开规则：浮在所有对局浮层（动画/toast/跟弃标签等）之上 */
   box-shadow: 0 6px 16px rgba(30, 60, 45, 0.15);
 }
 
@@ -1174,6 +1174,7 @@ body {
   flex-direction: column;
   gap: 4px;
   color: var(--text);
+  z-index: 9990; /* 点开记录：浮在所有对局浮层之上 */
 }
 
 .log-entry {
@@ -1182,7 +1183,28 @@ body {
   border-radius: 6px;
   background: rgba(30, 94, 63, 0.07);
   line-height: 1.4;
+  word-break: break-word;
 }
+/* 记录颜色区分：玩家名按座位（机器人统一灰），动作按操作类型 */
+.log-player {
+  font-weight: 800;
+  margin-right: 4px;
+}
+.log-player.pc-0 { color: #2f6fd6; }
+.log-player.pc-1 { color: #d9822b; }
+.log-player.pc-2 { color: #1f9e66; }
+.log-player.pc-3 { color: #8f5ec9; }
+.log-player.pc-bot { color: #7d857d; }
+.log-action.ok-deal { color: #7a8f6f; }
+.log-action.ok-declare { color: #c0841c; }
+.log-action.ok-draw { color: #2f6fd6; }
+.log-action.ok-peek { color: #1499ab; }
+.log-action.ok-discard { color: #8a8f8a; }
+.log-action.ok-follow { color: #1f9e57; }
+.log-action.ok-follow_fail { color: #d64a3a; }
+.log-action.ok-pass { color: #9aa0a6; }
+.log-action.ok-swap { color: #8f5ec9; }
+.log-action.ok-info { color: var(--text-soft); }
 
 .log-system {
   background: rgba(255, 224, 130, 0.35);
@@ -1500,17 +1522,18 @@ body {
 
 .toasts {
   position: fixed;
-  right: 12px;
-  bottom: 118px; /* 操作面板上方（78→118），不再遮挡摸牌/替换等操作按钮 */
-  left: auto;
-  top: auto;
-  transform: none;
-  z-index: 50;
+  top: 104px; /* 顶栏下方、牌堆上方：不再遮挡底部操作面板（替换手牌等按钮） */
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translateX(-50%);
+  z-index: 60;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
-  max-height: calc(100vh - 250px);
+  max-width: 90vw;
+  max-height: calc(100vh - 220px);
   overflow: hidden;
   pointer-events: none;
 }
@@ -2050,3 +2073,32 @@ body {
   word-break: break-all;
   white-space: pre-wrap;
 }
+/* ============ 规则/记录层级 + 经典风对比度 + 日志颜色适配（本轮） ============ */
+
+/* 经典风：弹窗内规则面板改浅色纸面底 + 深字（深绿底+深绿字看不清），关键词深橙高亮 */
+[data-theme='classic'] .modal-card .rules-panel {
+  background: #f2f9f0;
+  color: #14432b;
+}
+[data-theme='classic'] .modal-card .rules-panel li b {
+  color: #a34a12; /* 深橙高亮，浅底上清晰 */
+}
+/* 经典风：对局中常驻规则面板（深色底）关键词改金色高亮 */
+[data-theme='classic'] .rules-panel li b {
+  color: var(--gold);
+}
+/* 经典风：日志面板为深色底 → 玩家色/操作色整体提亮保证可读 */
+[data-theme='classic'] .log-player.pc-0 { color: #6ea0f0; }
+[data-theme='classic'] .log-player.pc-1 { color: #f0a050; }
+[data-theme='classic'] .log-player.pc-2 { color: #58c98f; }
+[data-theme='classic'] .log-player.pc-3 { color: #c39af0; }
+[data-theme='classic'] .log-player.pc-bot { color: #a8b0a8; }
+[data-theme='classic'] .log-action.ok-deal { color: #a8c09a; }
+[data-theme='classic'] .log-action.ok-declare { color: #f6c945; }
+[data-theme='classic'] .log-action.ok-draw { color: #6ea0f0; }
+[data-theme='classic'] .log-action.ok-peek { color: #5fd0e0; }
+[data-theme='classic'] .log-action.ok-discard { color: #c0c6c0; }
+[data-theme='classic'] .log-action.ok-follow { color: #58d98f; }
+[data-theme='classic'] .log-action.ok-follow_fail { color: #ff8a7a; }
+[data-theme='classic'] .log-action.ok-pass { color: #b8bcc0; }
+[data-theme='classic'] .log-action.ok-swap { color: #c39af0; }
