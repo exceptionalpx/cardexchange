@@ -1,11 +1,33 @@
 # 换牌王（Card Exchange）
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/exceptionalpx/cardexchange/actions/workflows/ci.yml/badge.svg)](https://github.com/exceptionalpx/cardexchange/actions/workflows/ci.yml)
+[![在线试玩](https://img.shields.io/badge/试玩-在线-4eb271)](https://cardexchange.onrender.com)
+
 一个考验**记忆力、观察力与心理博弈**的多人扑克桌游网页版。摸牌、记牌、换牌、弃牌、定牌——总分最小者获胜。
 
-> 🎮 在线试玩：<https://cardexchange.onrender.com/>
+> 🎮 在线试玩：<https://cardexchange.onrender.com />
 > （支持手机浏览器，2~4 人对战 + 机器人）
 
----
+## 截图
+
+![对局界面](docs/screenshots/gameplay.png)
+
+![房间与大厅](docs/screenshots/room.png)
+
+![主页大厅](docs/screenshots/home.png)
+
+## 目录
+
+- [玩法简介](#玩法简介)
+- [游戏规则](#游戏规则)
+- [功能特性](#功能特性)
+- [本地运行](#本地运行)
+- [测试](#测试)
+- [技术栈](#技术栈)
+- [项目结构](#项目结构)
+- [部署](#部署)
+- [开源许可](#开源许可)
 
 ## 玩法简介
 
@@ -75,18 +97,16 @@
 # 1. 安装依赖
 npm install
 
-# 2. 启动联机服务器（3001 端口，含 WebSocket）
-npm run server
+# 2. 首次构建前端静态页面
+npm run build
 
-# 3. 另开一个终端，启动前端开发服务器（5173 端口）
-npm run dev
+# 3. 启动联机服务器（3001 端口，含 WebSocket 与前端页面）
+npm run server
 ```
 
-浏览器打开 <http://localhost:5173> 即可开始游戏。
-
-**本机测试联机**：打开两个浏览器标签页访问同一地址，即可扮演两个玩家。
-
-**局域网联机**：电脑与手机连同一 WiFi（或手机开热点），手机访问 `http://<电脑局域网IP>:3001`（需先 `npm run build` 让 3001 提供静态页面）。
+- **单机游玩 / 局域网联机**：浏览器打开 <http://localhost:3001>；同一 WiFi 下手机访问 `http://<电脑局域网IP>:3001` 即可加入。
+- **前端热更新开发**：另开一个终端跑 `npm run dev`，访问 <http://localhost:5173>。
+- **本机测试联机**：打开两个浏览器标签页访问同一地址，即可扮演两个玩家。
 
 ## 测试
 
@@ -95,7 +115,7 @@ npm test          # 运行全部测试（Vitest）
 npm run test:watch
 ```
 
-提交前请确保 `npx vitest run` 全绿、`npm run build` 通过。
+提交前请确保 `npx vitest run` 全绿、`npm run build` 通过（CI 会自动执行同样的检查）。
 
 ## 技术栈
 
@@ -112,7 +132,7 @@ npm run test:watch
 │   └── styles/     # 主题样式（可爱风 / 经典风）
 ├── server/         # 联机服务器（房间管理、WebSocket 协议、机器人托管）
 ├── tests/          # 自动化测试（含游戏规则与服务器协议测试）
-├── docs/           # 产品设计文档与技术方案
+├── docs/           # 产品设计文档、技术方案、截图
 ├── public/         # 静态资源（分享卡片图、favicon）
 ├── Dockerfile      # 容器化部署
 └── render.yaml     # Render 部署配置
@@ -126,6 +146,6 @@ npm run test:watch
 2. Render 中新建 Web Service，连接该仓库
 3. 使用 `render.yaml` 配置，或手动设置：构建命令 `npm install && npm run build`，启动命令 `npm run server`
 
----
+## 开源许可
 
-© 2026 换牌王 · 保留所有权利
+本项目基于 [MIT License](LICENSE) 开源，可自由使用、修改与分发（保留版权声明即可）。
