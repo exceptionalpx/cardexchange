@@ -30,12 +30,17 @@ export default function ResultScreen({
 }: Props) {
   const winners = state.winner ?? [];
   const hasTotal = !!totalScores && Object.keys(totalScores).length > 0;
-  /** 小红书容器内才显示分享入口（普通浏览器 / 联机版不显示） */
-  const xhs = __XHS__ && isXhsContainer();
-  const [shareState, setShareState] = useState<'idle' | 'saving' | 'done' | 'fail'>('idle');
+  /** 分享/保存按钮：xhs 构建模式即显示（本地 http 试玩也能看到入口；无容器时点击给提示） */
+  const xhs = __XHS__;
+  const [shareState, setShareState] = useState<'idle' | 'saving' | 'done' | 'fail' | 'nocontainer'>('idle');
 
   async function handleShare(toNote: boolean) {
     if (shareState === 'saving') return;
+    // 本地 http 试玩时没有小红书容器 API：直接提示，不再尝试调用
+    if (!isXhsContainer()) {
+      setShareState('nocontainer');
+      return;
+    }
     setShareState('saving');
     const dataUrl = drawResultImage(state);
     if (!dataUrl) {
@@ -154,6 +159,9 @@ export default function ResultScreen({
         )}
         {xhs && shareState === 'done' && <p className="hint">✅ 已完成</p>}
         {xhs && shareState === 'fail' && <p className="hint hint-error">操作失败，请重试</p>}
+        {xhs && shareState === 'nocontainer' && (
+          <p className="hint">请在小红书小工具容器内打开，使用分享/保存功能</p>
+        )}
       </div>
     </div>
   );

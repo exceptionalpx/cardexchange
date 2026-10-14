@@ -5,13 +5,15 @@ import WatchScreen from './components/WatchScreen';
 import LocalLobby from './components/LocalLobby';
 import { loadAvatar } from './components/AvatarPicker';
 import { unlockAudio } from './core/sfx';
-import { hydrateFromXhs } from './core/storage';
+import { hydrateFromXhs, storage } from './core/storage';
 
 export interface GameConfigUI {
   playerCount: number;
   botCount: number;
   /** 各座位头像（本地模式仅座位 0 可设置） */
   avatars?: string[];
+  /** 各座位玩家名（本地模式座位 0 = 玩家输入的昵称；机器人座位留空用默认"机器人N"） */
+  playerNames?: string[];
   /** 跟弃窗口时长（毫秒）：联机读房间设置，本地默认 3000 */
   followWindowMs?: number;
   /** 定牌奖励开关：牌堆剩余 >=60% 减 2 分、>=35% 减 1 分 */
@@ -26,7 +28,15 @@ export interface GameConfigUI {
 
 /** 教学引导局配置（固定剧本：1 真人 + 1 新手机器人） */
 function guidedConfig(): GameConfigUI {
-  return { playerCount: 2, botCount: 1, guided: true, botMemory: 0.4, avatars: [loadAvatar()] };
+  const n = storage.get('cardexchange-name');
+  return {
+    playerCount: 2,
+    botCount: 1,
+    guided: true,
+    botMemory: 0.4,
+    avatars: [loadAvatar()],
+    playerNames: n ? [n] : undefined,
+  };
 }
 
 export default function App() {

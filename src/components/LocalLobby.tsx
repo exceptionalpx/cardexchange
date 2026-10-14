@@ -69,6 +69,7 @@ export default function LocalLobby({ onStart, onGuided }: Props) {
       playerCount: 1 + botCount,
       botCount,
       avatars: [avatar || '🐱'],
+      playerNames: [finalName],
       followWindowMs: followMs,
       declareBonus: bonus,
       allowSelfFollow: selfFollow,
@@ -117,9 +118,9 @@ export default function LocalLobby({ onStart, onGuided }: Props) {
         <label>🧠 机器人难度</label>
         <div className="btn-group">
           {[
-            { v: 0.4, t: '新手（常记错）' },
+            { v: 0.4, t: '新手' },
             { v: 0.2, t: '标准' },
-            { v: 0, t: '高手（完美记忆）' },
+            { v: 0, t: '高手' },
           ].map((o) => (
             <button
               key={o.v}
