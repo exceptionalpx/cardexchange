@@ -14,6 +14,7 @@
  */
 
 import { storage } from './storage';
+import { AUDIO_BASE64 } from './audio-data';
 
 export type SfxName =
   | 'card_draw' // 摸牌
@@ -51,9 +52,13 @@ const SFX_NAMES: SfxName[] = [
   'lose',
 ];
 
-/** 音效资源相对路径（zip 离线包以 file:// 加载，不能用绝对路径 /sfx） */
-function sfxUrl(name: string): string {
-  return `./sfx/${name}.mp3`;
+/** data:audio/mp3;base64,... → ArrayBuffer（音频全部内嵌在 js 里，不引用外部媒体文件） */
+function base64ToArrayBuffer(dataUrl: string): ArrayBuffer {
+  const csv = dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : dataUrl;
+  const bin = atob(csv);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
 }
 
 let visibilityBound = false;
@@ -71,8 +76,6 @@ let bgmGain: GainNode | null = null;
 const buffers = new Map<SfxName, AudioBuffer>();
 /** 各音效最近一次播放时间（去重用） */
 const lastPlayedAt = new Map<SfxName, number>();
-/** HTMLAudio 降级池：file:// 沙箱下 fetch 被拦时自动走 <audio> 播放 */
-const audioPool = new Map<SfxName, HTMLAudioElement[]>();
 
 function loadVolume(key: string, def: number): number {
   const raw = storage.get(key);
@@ -98,47 +101,39 @@ function ensureCtx(): AudioContext | null {
   return ctx;
 }
 
-/** 预解码全部音效（在首次用户手势内发起；完成后任意时机播放均即时） */
+/** 预解码全部音效（base64 内存解码，不发起任何网络请求；完成后任意时机播放均即时） */
 function preloadSfx(c: AudioContext): void {
   if (preloaded) return;
   preloaded = true;
   for (const name of SFX_NAMES) {
-    fetch(sfxUrl(name))
-      .then((r) => {
-        if (!r.ok) throw new Error(`sfx ${name} ${r.status}`);
-        return r.arrayBuffer();
-      })
-      .then((buf) => c.decodeAudioData(buf))
+    const dataUrl = AUDIO_BASE64[name];
+    if (!dataUrl) continue;
+    c.decodeAudioData(base64ToArrayBuffer(dataUrl))
       .then((ab) => {
         if (ab && ab.duration > 0) buffers.set(name, ab);
       })
       .catch(() => {
-        /* 单个音效加载失败不影响其他（file:// 沙箱被拦时自动走 HTMLAudio 降级） */
+        /* 单个音效解码失败不影响其他 */
       });
   }
 }
 
-/** 背景音乐：fetch 解码 mp3 → BufferSource + loop，挂独立 bgmGain。幂等。 */
+/** 背景音乐：base64 解码 mp3 → BufferSource + loop，挂独立 bgmGain。幂等。 */
 async function startBgm(c: AudioContext): Promise<void> {
   if (bgmGain) return; // 已启动
   bgmGain = c.createGain();
   bgmGain.gain.value = bgmVolume;
   bgmGain.connect(c.destination);
 
-  const tryUrl = async (url: string): Promise<AudioBuffer | null> => {
-    try {
-      const r = await fetch(url);
-      if (!r.ok) return null;
-      const ab = await r.arrayBuffer();
-      const buf = await c.decodeAudioData(ab);
-      return buf && buf.duration > 0 ? buf : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const buf = await tryUrl('./sfx/bgm.mp3');
-  if (!buf || !bgmGain) return; // 失败：静默，不阻塞游戏（沙箱 file:// 下 BGM 不可用）
+  const dataUrl = AUDIO_BASE64['bgm'];
+  if (!dataUrl) return;
+  let buf: AudioBuffer | null = null;
+  try {
+    buf = await c.decodeAudioData(base64ToArrayBuffer(dataUrl));
+  } catch {
+    buf = null;
+  }
+  if (!buf || !bgmGain) return; // 失败：静默，不阻塞游戏
 
   const src = c.createBufferSource();
   src.buffer = buf;
@@ -180,30 +175,6 @@ export function unlockAudio(): void {
   }
 }
 
-/** HTMLAudio 降级播放：沙箱 file:// 下 fetch 被拦时的兜底路径 */
-function playViaAudioElement(name: SfxName): void {
-  try {
-    let pool = audioPool.get(name);
-    if (!pool) {
-      pool = [];
-      audioPool.set(name, pool);
-    }
-    // 同一音效最多复用 2 个实例，避免快速连播时互相打断
-    let el = pool.find((a) => a.paused || a.ended);
-    if (!el) {
-      if (pool.length >= 2) return;
-      el = new Audio(sfxUrl(name));
-      el.volume = sfxVolume;
-      pool.push(el);
-    } else {
-      el.volume = sfxVolume;
-    }
-    void el.play().catch(() => {});
-  } catch {
-    /* 音频不可用时静默 */
-  }
-}
-
 /** 播放一个游戏音效（Web Audio 即时发声；同一音效 150ms 内去重） */
 export function playSfx(name: SfxName): void {
   try {
@@ -215,11 +186,7 @@ export function playSfx(name: SfxName): void {
     const c = ensureCtx();
     if (!c || !sfxGain) return;
     const buf = buffers.get(name);
-    if (!buf) {
-      // Web Audio 未解码成功（file:// 沙箱 fetch 被拦）→ HTMLAudio 兜底
-      playViaAudioElement(name);
-      return;
-    }
+    if (!buf) return; // 解码未完成：静默跳过
     const src = c.createBufferSource();
     src.buffer = buf;
     src.connect(sfxGain);

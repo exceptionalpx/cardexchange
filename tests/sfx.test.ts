@@ -31,18 +31,23 @@ describe('sfx Web Audio', () => {
     vi.restoreAllMocks();
   });
 
-  it('unlockAudio 创建上下文并预解码（fetch 全部音效 + BGM）', async () => {
-    const fetchMock = mockFetchOk();
+  it('unlockAudio 创建上下文并预解码（base64 内存解码，无网络请求）', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
     const sfx = await loadSfx();
     sfx.unlockAudio();
-    // 等待 fetch → arrayBuffer → decodeAudioData → buffers/bgm 完成
-    await new Promise((r) => setTimeout(r, 30));
-    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
-    // 12 个音效 mp3 + BGM mp3（相对路径，适配 file:// 离线包）
-    expect(urls.length).toBeGreaterThanOrEqual(12);
-    expect(urls).toContain('./sfx/card_draw.mp3');
-    expect(urls).toContain('./sfx/follow_fail.mp3');
-    expect(urls).toContain('./sfx/bgm.mp3');
+    // 等待 base64 → decodeAudioData → buffers 完成
+    await new Promise((r) => setTimeout(r, 50));
+    // 全程不发起任何网络请求（音频全部内嵌在 js 里）
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const proto = (globalThis as Record<string, unknown>).AudioContext as unknown as {
+      prototype: { createBufferSource: () => { start(): void } };
+    };
+    const spy = vi.spyOn(proto.prototype, 'createBufferSource');
+    sfx.playSfx('card_draw');
+    // 解码成功后播放 card_draw → 创建了 buffer source
+    expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('同一音效 150ms 内去重，间隔后再次触发可播放', async () => {
