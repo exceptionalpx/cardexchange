@@ -61,6 +61,9 @@ export default function App() {
 
   // 小红书小工具模式：纯单机大厅，不 import 联机流程（代码保留在源码中，master 构建自动恢复）
   if (__XHS__) {
+    if (guidedCfg) {
+      return <GameScreen config={guidedCfg} onExit={() => setGuidedCfg(null)} />;
+    }
     if (xhsConfig) {
       return <GameScreen config={xhsConfig} onExit={() => setXhsConfig(null)} />;
     }
