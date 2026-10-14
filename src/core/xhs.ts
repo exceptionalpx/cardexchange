@@ -18,9 +18,11 @@ interface MiniTool {
   ) => Promise<{ filePath: string }> | undefined;
   saveImageToPhotosAlbum?: (
     opts: { filePath: string },
+    cb?: { success?: (r: unknown) => void; fail?: (e: unknown) => void },
   ) => Promise<unknown> | undefined;
   postNote?: (
     opts: { title?: string; content?: string; images?: string[] },
+    cb?: { success?: (r: unknown) => void; fail?: (e: unknown) => void },
   ) => Promise<unknown> | undefined;
   setStorage?: (opts: { key: string; data: string }) => Promise<unknown> | undefined;
   getStorage?: (opts: { key: string }) => Promise<{ data: string }> | undefined;
@@ -46,45 +48,71 @@ function miniTool(): MiniTool | null {
   return sdk()?.miniTool ?? null;
 }
 
+/**
+ * 统一调用器：同时兼容 Promise 形态与 success/fail 回调形态。
+ * 容器 JSSDK 不统一——有的 API 返回 Promise，有的只走回调（await 拿到 undefined）。
+ * 两种形态都接：若调用返回 thenable 就用它，否则靠传入的 success/fail 回调收结果。
+ */
+function call<T>(
+  fn: ((opts: unknown, cb: { success: (r: unknown) => void; fail: (e: unknown) => void }) => unknown) | undefined,
+  opts: unknown,
+  extract: (r: unknown) => T | null,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    if (!fn) return resolve(null);
+    let settled = false;
+    const finish = (v: T | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(v);
+    };
+    try {
+      const ret = fn(opts, {
+        success: (r: unknown) => finish(extract(r)),
+        fail: () => finish(null),
+      });
+      // Promise 形态：thenable 优先
+      if (ret && typeof (ret as Promise<unknown>).then === 'function') {
+        (ret as Promise<unknown>)
+          .then((r) => finish(extract(r)))
+          .catch(() => finish(null));
+      }
+      // 回调形态：success/fail 会在上面 finish（settled 兜底防双触发）
+    } catch {
+      finish(null);
+    }
+  });
+}
+
 /** 把 base64（data: 头可带可不带）写成容器临时文件，返回 filePath；失败返回 null */
 export async function writeTempFile(base64: string): Promise<string | null> {
   const mt = miniTool();
-  if (!mt?.writeTempFile) return null;
-  try {
-    const clean = base64.includes(',') ? base64.slice(base64.indexOf(',') + 1) : base64;
-    const res = await mt.writeTempFile({ base64: clean });
-    // 回调形态时返回 undefined，结果走 success；Promise 形态返回 { filePath }
-    if (res && typeof res === 'object' && 'filePath' in res) {
-      return (res as { filePath: string }).filePath;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  const clean = base64.includes(',') ? base64.slice(base64.indexOf(',') + 1) : base64;
+  return call<string>(
+    mt?.writeTempFile as never,
+    { base64: clean },
+    (r) => {
+      if (r && typeof r === 'object' && 'filePath' in r) {
+        const fp = (r as { filePath: unknown }).filePath;
+        return typeof fp === 'string' ? fp : null;
+      }
+      return null;
+    },
+  );
 }
 
 /** 保存图片到系统相册（filePath 由 writeTempFile 换来）；返回是否成功 */
 export async function saveImageToAlbum(filePath: string): Promise<boolean> {
   const mt = miniTool();
-  if (!mt?.saveImageToPhotosAlbum) return false;
-  try {
-    await mt.saveImageToPhotosAlbum({ filePath });
-    return true;
-  } catch {
-    return false;
-  }
+  const r = await call<unknown>(mt?.saveImageToPhotosAlbum as never, { filePath }, () => true);
+  return r !== null;
 }
 
 /** 唤起发布笔记页（战绩分享）；images 为 writeTempFile 换来的 filePath 列表 */
 export async function postNote(opts: { title?: string; content?: string; images?: string[] }): Promise<boolean> {
   const mt = miniTool();
-  if (!mt?.postNote) return false;
-  try {
-    await mt.postNote(opts);
-    return true;
-  } catch {
-    return false;
-  }
+  const r = await call<unknown>(mt?.postNote as never, opts, () => true);
+  return r !== null;
 }
 
 /** xhs 本地缓存：异步写（失败静默——localStorage 已有同步副本，不阻塞游戏） */

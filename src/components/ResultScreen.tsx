@@ -33,6 +33,7 @@ export default function ResultScreen({
   /** 分享/保存按钮：xhs 构建模式即显示（本地 http 试玩也能看到入口；无容器时点击给提示） */
   const xhs = __XHS__;
   const [shareState, setShareState] = useState<'idle' | 'saving' | 'done' | 'fail' | 'nocontainer'>('idle');
+  const [failStep, setFailStep] = useState('');
 
   async function handleShare(toNote: boolean) {
     if (shareState === 'saving') return;
@@ -42,28 +43,33 @@ export default function ResultScreen({
       return;
     }
     setShareState('saving');
+    setFailStep('');
     const dataUrl = drawResultImage(state);
     if (!dataUrl) {
+      setFailStep('生成战绩图');
       setShareState('fail');
       return;
     }
     const filePath = await writeTempFile(dataUrl);
     if (!filePath) {
+      setFailStep('写入临时文件');
       setShareState('fail');
       return;
     }
+    let ok = false;
     if (toNote) {
       const winNames = winners.map((id) => state.players[id]?.name ?? '').join('、');
-      const ok = await postNote({
+      ok = await postNote({
         title: '我在换牌王拿到了好成绩！',
         content: `🏆 ${winNames} 获胜！你也来试试这手牌吧～ #换牌王 #卡牌游戏`,
         images: [filePath],
       });
-      setShareState(ok ? 'done' : 'fail');
+      if (!ok) setFailStep('唤起发布笔记');
     } else {
-      const ok = await saveImageToAlbum(filePath);
-      setShareState(ok ? 'done' : 'fail');
+      ok = await saveImageToAlbum(filePath);
+      if (!ok) setFailStep('保存到相册');
     }
+    setShareState(ok ? 'done' : 'fail');
   }
 
   // 结算音效：获胜/落败（挂载时播一次）
@@ -158,7 +164,11 @@ export default function ResultScreen({
           </div>
         )}
         {xhs && shareState === 'done' && <p className="hint">✅ 已完成</p>}
-        {xhs && shareState === 'fail' && <p className="hint hint-error">操作失败，请重试</p>}
+        {xhs && shareState === 'fail' && (
+          <p className="hint hint-error">
+            操作失败{failStep ? `（${failStep}）` : ''}，请重试
+          </p>
+        )}
         {xhs && shareState === 'nocontainer' && (
           <p className="hint">请在小红书小工具容器内打开，使用分享/保存功能</p>
         )}
