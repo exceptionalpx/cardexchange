@@ -1,12 +1,13 @@
 // 头像选择器：12 个内置可爱图标 + 支持上传本地图片（压缩 ≤64px 转 dataURL）
 import { useRef } from 'react';
+import { storage } from '../core/storage';
 
 export const AVATAR_EMOJIS = ['🐱', '🐶', '🐰', '🐻', '🦊', '🐼', '🐨', '🦁', '🐸', '🐧', '🦄', '🐯'];
 
 export const AVATAR_KEY = 'cardexchange-avatar';
 
 export function loadAvatar(): string {
-  return localStorage.getItem(AVATAR_KEY) ?? '';
+  return storage.get(AVATAR_KEY) ?? '';
 }
 
 interface Props {

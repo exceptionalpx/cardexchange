@@ -1,26 +1,19 @@
 import { useState, type ReactNode } from 'react';
 import { getBgmVolume, getSfxVolume, setBgmVolume, setSfxVolume } from '../core/sfx';
+import { storage } from '../core/storage';
 
 export const THEME_KEY = 'cardexchange-theme';
 
-/** 应用主题到 <html data-theme> + localStorage（首页/对局中均可调用，实时生效） */
+/** 应用主题到 <html data-theme> + 持久化（首页/对局中均可调用，实时生效） */
 export function applyTheme(theme: 'cute' | 'classic'): void {
   document.documentElement.dataset.theme = theme;
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch {
-    /* ignore */
-  }
+  storage.set(THEME_KEY, theme);
 }
 
 /** 读取当前主题（默认经典风） */
 export function loadTheme(): 'cute' | 'classic' {
-  try {
-    const v = localStorage.getItem(THEME_KEY);
-    return v === 'cute' || v === 'classic' ? v : 'classic';
-  } catch {
-    return 'classic';
-  }
+  const v = storage.get(THEME_KEY);
+  return v === 'cute' || v === 'classic' ? v : 'classic';
 }
 
 interface Props {

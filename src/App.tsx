@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import GameScreen from './components/GameScreen';
 import OnlineFlow from './components/OnlineFlow';
 import WatchScreen from './components/WatchScreen';
+import LocalLobby from './components/LocalLobby';
 import { loadAvatar } from './components/AvatarPicker';
 import { unlockAudio } from './core/sfx';
+import { hydrateFromXhs } from './core/storage';
 
 export interface GameConfigUI {
   playerCount: number;
@@ -22,7 +24,14 @@ export interface GameConfigUI {
   guided?: boolean;
 }
 
+/** 教学引导局配置（固定剧本：1 真人 + 1 新手机器人） */
+function guidedConfig(): GameConfigUI {
+  return { playerCount: 2, botCount: 1, guided: true, botMemory: 0.4, avatars: [loadAvatar()] };
+}
+
 export default function App() {
+  // xhs（小红书小工具）模式下的本地对局配置
+  const [xhsConfig, setXhsConfig] = useState<GameConfigUI | null>(null);
   // 教学局：唯一本地入口（不联网，固定剧本教学）
   const [guidedCfg, setGuidedCfg] = useState<GameConfigUI | null>(null);
   // 观战：点击开放房间中"对局中"的房间进入（独立连接，不占座位）
@@ -35,6 +44,24 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
+  // xhs 容器：启动时把小工具持久缓存灌回本地存储（异步，不阻塞渲染）
+  useEffect(() => {
+    hydrateFromXhs();
+  }, []);
+
+  // 小红书小工具模式：纯单机大厅，不 import 联机流程（代码保留在源码中，master 构建自动恢复）
+  if (__XHS__) {
+    if (xhsConfig) {
+      return <GameScreen config={xhsConfig} onExit={() => setXhsConfig(null)} />;
+    }
+    return (
+      <LocalLobby
+        onStart={setXhsConfig}
+        onGuided={() => setGuidedCfg(guidedConfig())}
+      />
+    );
+  }
+
   if (guidedCfg) {
     return <GameScreen config={guidedCfg} onExit={() => setGuidedCfg(null)} />;
   }
@@ -44,9 +71,7 @@ export default function App() {
   // 主页 = 联机大厅（创建/加入房间为主入口，教学局为次级入口）
   return (
     <OnlineFlow
-      onGuided={() =>
-        setGuidedCfg({ playerCount: 2, botCount: 1, guided: true, botMemory: 0.4, avatars: [loadAvatar()] })
-      }
+      onGuided={() => setGuidedCfg(guidedConfig())}
       onWatch={setWatchCode}
     />
   );

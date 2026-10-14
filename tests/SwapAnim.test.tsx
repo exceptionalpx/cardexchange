@@ -46,20 +46,20 @@ describe('SwapAnim 爪型素材渲染', () => {
     const c = renderSwap('🐯');
     const img = c.querySelector('.swap-paw-img') as HTMLImageElement | null;
     expect(img).toBeTruthy();
-    expect(img!.src.endsWith('/paws/tiger.png')).toBe(true);
+    expect(img!.src.endsWith('/paws/tiger.webp')).toBe(true);
   });
 
   it('机器人（🤖）换牌 → 动画层使用机械手素材', () => {
     const c = renderSwap('🤖');
     const img = c.querySelector('.swap-paw-img') as HTMLImageElement | null;
     expect(img).toBeTruthy();
-    expect(img!.src.endsWith('/paws/robot.png')).toBe(true);
+    expect(img!.src.endsWith('/paws/robot.webp')).toBe(true);
   });
 
   it('自定义上传头像（dataURL）换牌 → 猫爪兜底', () => {
     const c = renderSwap('data:image/png;base64,abc');
     const img = c.querySelector('.swap-paw-img') as HTMLImageElement | null;
     expect(img).toBeTruthy();
-    expect(img!.src.endsWith('/paws/cat.png')).toBe(true);
+    expect(img!.src.endsWith('/paws/cat.webp')).toBe(true);
   });
 });

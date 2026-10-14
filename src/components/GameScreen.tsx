@@ -17,6 +17,7 @@ import MoveAnim from './MoveAnim';
 import PeekAnim from './PeekAnim';
 import SettingsModal from './SettingsModal';
 import { playSfx } from '../core/sfx';
+import { storage } from '../core/storage';
 
 /** 联机模式属性：服务器权威视图 + 动作发送 */
 export interface OnlineGameProps {
@@ -359,17 +360,17 @@ export default function GameScreen({ config, online, onExit }: Props) {
     if (state.phase !== 'end' || scoredRef.current) return;
     scoredRef.current = true;
     try {
-      const raw = localStorage.getItem(TOTAL_KEY);
+      const raw = storage.get(TOTAL_KEY);
       const prev = raw ? (JSON.parse(raw) as { games: number; scores: Record<string, number> }) : { games: 0, scores: {} };
       const scores = { ...prev.scores };
       for (const p of state.players) {
         scores[p.name] = (scores[p.name] ?? 0) + (p.score ?? 0);
       }
       const next = { games: (prev.games ?? 0) + 1, scores };
-      localStorage.setItem(TOTAL_KEY, JSON.stringify(next));
+      storage.set(TOTAL_KEY, JSON.stringify(next));
       setLocalTotals(next);
     } catch {
-      /* localStorage 不可用时静默跳过累计 */
+      /* 存储不可用时静默跳过累计 */
     }
   }, [state.phase, state.players, isOnline]);
 

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:xhs": "tsc --noEmit && vite build --mode xhs",
     "preview": "vite preview",
     "server": "tsx server/index.ts",
     "test": "vitest run",

@@ -7,3 +7,9 @@ server-log.txt
 
 server.log
 
+# 小红书小工具打包工具（本地工具，不进版本库）
+.skill/
+
+# 小红书小工具最终 zip（构建产物，不上版本库）
+换牌王-xhs-minitool.zip
+

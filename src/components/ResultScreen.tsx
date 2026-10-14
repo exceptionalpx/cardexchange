@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { GameState } from '../core/types';
 import CardView from './CardView';
 import { playSfx } from '../core/sfx';
+import { drawResultImage } from '../core/shareImage';
+import { isXhsContainer, writeTempFile, saveImageToAlbum, postNote } from '../core/xhs';
 
 interface Props {
   state: GameState;
@@ -28,6 +30,36 @@ export default function ResultScreen({
 }: Props) {
   const winners = state.winner ?? [];
   const hasTotal = !!totalScores && Object.keys(totalScores).length > 0;
+  /** 小红书容器内才显示分享入口（普通浏览器 / 联机版不显示） */
+  const xhs = __XHS__ && isXhsContainer();
+  const [shareState, setShareState] = useState<'idle' | 'saving' | 'done' | 'fail'>('idle');
+
+  async function handleShare(toNote: boolean) {
+    if (shareState === 'saving') return;
+    setShareState('saving');
+    const dataUrl = drawResultImage(state);
+    if (!dataUrl) {
+      setShareState('fail');
+      return;
+    }
+    const filePath = await writeTempFile(dataUrl);
+    if (!filePath) {
+      setShareState('fail');
+      return;
+    }
+    if (toNote) {
+      const winNames = winners.map((id) => state.players[id]?.name ?? '').join('、');
+      const ok = await postNote({
+        title: '我在换牌王拿到了好成绩！',
+        content: `🏆 ${winNames} 获胜！你也来试试这手牌吧～ #换牌王 #卡牌游戏`,
+        images: [filePath],
+      });
+      setShareState(ok ? 'done' : 'fail');
+    } else {
+      const ok = await saveImageToAlbum(filePath);
+      setShareState(ok ? 'done' : 'fail');
+    }
+  }
 
   // 结算音效：获胜/落败（挂载时播一次）
   useEffect(() => {
@@ -101,6 +133,27 @@ export default function ResultScreen({
             返回主菜单
           </button>
         </div>
+
+        {xhs && (
+          <div className="btn-row">
+            <button
+              className="btn btn-primary"
+              disabled={shareState === 'saving'}
+              onClick={() => void handleShare(true)}
+            >
+              📤 分享战绩到小红书
+            </button>
+            <button
+              className="btn"
+              disabled={shareState === 'saving'}
+              onClick={() => void handleShare(false)}
+            >
+              🖼️ 保存战绩图
+            </button>
+          </div>
+        )}
+        {xhs && shareState === 'done' && <p className="hint">✅ 已完成</p>}
+        {xhs && shareState === 'fail' && <p className="hint hint-error">操作失败，请重试</p>}
       </div>
     </div>
   );

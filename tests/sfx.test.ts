@@ -38,11 +38,11 @@ describe('sfx Web Audio', () => {
     // 等待 fetch → arrayBuffer → decodeAudioData → buffers/bgm 完成
     await new Promise((r) => setTimeout(r, 30));
     const urls = fetchMock.mock.calls.map((c) => String(c[0]));
-    // 12 个音效 + BGM mp3（mock 成功时不回退 wav）
+    // 12 个音效 mp3 + BGM mp3（相对路径，适配 file:// 离线包）
     expect(urls.length).toBeGreaterThanOrEqual(12);
-    expect(urls).toContain('/sfx/card_draw.wav');
-    expect(urls).toContain('/sfx/follow_fail.wav');
-    expect(urls).toContain('/sfx/bgm.mp3');
+    expect(urls).toContain('./sfx/card_draw.mp3');
+    expect(urls).toContain('./sfx/follow_fail.mp3');
+    expect(urls).toContain('./sfx/bgm.mp3');
   });
 
   it('同一音效 150ms 内去重，间隔后再次触发可播放', async () => {

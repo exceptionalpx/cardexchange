@@ -13,6 +13,8 @@
  * - 音量独立持久化 localStorage：bgm 0.4、sfx 0.7，滑条实时生效。
  */
 
+import { storage } from './storage';
+
 export type SfxName =
   | 'card_draw' // 摸牌
   | 'card_cover' // 盖牌
@@ -49,6 +51,11 @@ const SFX_NAMES: SfxName[] = [
   'lose',
 ];
 
+/** 音效资源相对路径（zip 离线包以 file:// 加载，不能用绝对路径 /sfx） */
+function sfxUrl(name: string): string {
+  return `./sfx/${name}.mp3`;
+}
+
 let visibilityBound = false;
 let preloaded = false;
 let bgmVolume = loadVolume(BGM_KEY, BGM_DEFAULT);
@@ -64,16 +71,14 @@ let bgmGain: GainNode | null = null;
 const buffers = new Map<SfxName, AudioBuffer>();
 /** 各音效最近一次播放时间（去重用） */
 const lastPlayedAt = new Map<SfxName, number>();
+/** HTMLAudio 降级池：file:// 沙箱下 fetch 被拦时自动走 <audio> 播放 */
+const audioPool = new Map<SfxName, HTMLAudioElement[]>();
 
 function loadVolume(key: string, def: number): number {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null || raw === '') return def;
-    const v = Number(raw);
-    return Number.isFinite(v) && v >= 0 && v <= 1 ? v : def;
-  } catch {
-    return def;
-  }
+  const raw = storage.get(key);
+  if (raw === null || raw === '') return def;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : def;
 }
 
 function ensureCtx(): AudioContext | null {
@@ -98,7 +103,7 @@ function preloadSfx(c: AudioContext): void {
   if (preloaded) return;
   preloaded = true;
   for (const name of SFX_NAMES) {
-    fetch(`/sfx/${name}.wav`)
+    fetch(sfxUrl(name))
       .then((r) => {
         if (!r.ok) throw new Error(`sfx ${name} ${r.status}`);
         return r.arrayBuffer();
@@ -108,12 +113,12 @@ function preloadSfx(c: AudioContext): void {
         if (ab && ab.duration > 0) buffers.set(name, ab);
       })
       .catch(() => {
-        /* 单个音效加载失败不影响其他 */
+        /* 单个音效加载失败不影响其他（file:// 沙箱被拦时自动走 HTMLAudio 降级） */
       });
   }
 }
 
-/** 背景音乐：fetch 解码 mp3（失败回退 wav）→ BufferSource + loop，挂独立 bgmGain。幂等。 */
+/** 背景音乐：fetch 解码 mp3 → BufferSource + loop，挂独立 bgmGain。幂等。 */
 async function startBgm(c: AudioContext): Promise<void> {
   if (bgmGain) return; // 已启动
   bgmGain = c.createGain();
@@ -132,9 +137,8 @@ async function startBgm(c: AudioContext): Promise<void> {
     }
   };
 
-  let buf = await tryUrl('/sfx/bgm.mp3');
-  if (!buf) buf = await tryUrl('/sfx/bgm.wav');
-  if (!buf || !bgmGain) return; // 都失败：静默，不阻塞游戏
+  const buf = await tryUrl('./sfx/bgm.mp3');
+  if (!buf || !bgmGain) return; // 失败：静默，不阻塞游戏（沙箱 file:// 下 BGM 不可用）
 
   const src = c.createBufferSource();
   src.buffer = buf;
@@ -176,6 +180,30 @@ export function unlockAudio(): void {
   }
 }
 
+/** HTMLAudio 降级播放：沙箱 file:// 下 fetch 被拦时的兜底路径 */
+function playViaAudioElement(name: SfxName): void {
+  try {
+    let pool = audioPool.get(name);
+    if (!pool) {
+      pool = [];
+      audioPool.set(name, pool);
+    }
+    // 同一音效最多复用 2 个实例，避免快速连播时互相打断
+    let el = pool.find((a) => a.paused || a.ended);
+    if (!el) {
+      if (pool.length >= 2) return;
+      el = new Audio(sfxUrl(name));
+      el.volume = sfxVolume;
+      pool.push(el);
+    } else {
+      el.volume = sfxVolume;
+    }
+    void el.play().catch(() => {});
+  } catch {
+    /* 音频不可用时静默 */
+  }
+}
+
 /** 播放一个游戏音效（Web Audio 即时发声；同一音效 150ms 内去重） */
 export function playSfx(name: SfxName): void {
   try {
@@ -187,7 +215,11 @@ export function playSfx(name: SfxName): void {
     const c = ensureCtx();
     if (!c || !sfxGain) return;
     const buf = buffers.get(name);
-    if (!buf) return; // 未解码完成：静默跳过（预热后通常已就绪）
+    if (!buf) {
+      // Web Audio 未解码成功（file:// 沙箱 fetch 被拦）→ HTMLAudio 兜底
+      playViaAudioElement(name);
+      return;
+    }
     const src = c.createBufferSource();
     src.buffer = buf;
     src.connect(sfxGain);
@@ -199,22 +231,14 @@ export function playSfx(name: SfxName): void {
 
 export function setBgmVolume(v: number): void {
   bgmVolume = v;
-  try {
-    localStorage.setItem(BGM_KEY, String(v));
-  } catch {
-    /* ignore */
-  }
+  storage.set(BGM_KEY, String(v));
   // 页面隐藏时不打扰静音状态，仅记录新值；回到页面后按新值恢复
   if (bgmGain && !document.hidden) bgmGain.gain.value = v;
 }
 
 export function setSfxVolume(v: number): void {
   sfxVolume = v;
-  try {
-    localStorage.setItem(SFX_KEY, String(v));
-  } catch {
-    /* ignore */
-  }
+  storage.set(SFX_KEY, String(v));
   if (sfxGain) sfxGain.gain.value = v;
 }
 
